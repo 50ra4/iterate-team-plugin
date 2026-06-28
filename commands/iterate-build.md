@@ -173,7 +173,7 @@ OK はマージ待ちキューへ。NG は `max_retries` 未満なら team-gener
 
 ## ステップ 5.5: wave 内全 OK 後の merge
 
-メイン worktree で `plan.json` tasks[] 宣言順に `team-worktree-merge.sh` を順次実行する。コンフリクト時はエスカレーション（**自動解決禁止**）。
+メイン worktree で `plan.json` tasks[] 宣言順に `team-worktree-merge.sh` を順次実行する。コンフリクト時はエスカレーション（**自動解決禁止**）。dirty な task worktree（未コミット差分の取りこぼし）は exit 3 + `DIRTY_TASK_WORKTREE` でマージ拒否 → エスカレーション + クリーンアップ保留（未コミットファイルを温存）。
 
 詳細: [`iterate-team-runbook.md#ステップ-5-wave-並列タスクループ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-5-wave-並列タスクループ)
 

@@ -244,6 +244,7 @@ runlog 追記 `rejected` / `{rejected_revision}`、その後終了。**初稿コ
 > - team-publisher Agent が `validation_failed` で戻る（push 失敗）
 > - PR 作成 / 本文更新 / Ready 化が失敗
 > - merge conflict（team-worktree-merge.sh exit 1）
+> - dirty task worktree（team-worktree-merge.sh exit 3 + `DIRTY_TASK_WORKTREE`）→ マージせずエスカレーション・クリーンアップ保留（未コミット差分の取りこぼし防止）
 > - Codex MCP tool 経路固有: timeout / `codex_plan_review_invalid_format` / `codex_review_invalid_format`
 > - フォールバック経路固有: `team-reviewer-plan` / `team-reviewer-code` 起動失敗 / `plan_review_invalid_format` / `code_review_invalid_format`
 > - 詳細: `iterate-team-runbook.md#ステップ-8-失敗時挙動`

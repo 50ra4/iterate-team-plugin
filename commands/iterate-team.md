@@ -147,7 +147,7 @@ Planner 出力コミット後、ユーザー承認前に 24 観点で計画整�
   - **5.3.3 結果マージ**: Code Review (blocker/high) 無 → 確定 OK。有 → NG
   - **5.3.4**: Codex timeout 検出時 `codex_serial_fallback = true`（残 wave の Codex 呼出をタスク間で逐次化。Evaluator の並列性には影響しない）
 - **5.4**: OK → マージ待ちキュー。NG は `max_retries` 未満なら team-generator 再起動（同 worktree、差し戻し形式。**TDD タスクでも test-coder は再起動せず**、既存テストを緑にする impl 修正のみ。再 green 後は 5.2.5 refactor を再実行してから 5.3）。到達なら → ステップ 9
-- **5.5**: `team-worktree-merge.sh` 宣言順で順次 merge。コンフリクト → エスカレーション（**自動解決禁止**）
+- **5.5**: `team-worktree-merge.sh` 宣言順で順次 merge。コンフリクト → エスカレーション（**自動解決禁止**）。dirty な task worktree（未コミット差分の取りこぼし）は exit 3 + `DIRTY_TASK_WORKTREE` で**マージ拒否** → エスカレーション + クリーンアップ保留（runlog `merge_dirty_worktree`）
 - **5.6**: `team-worktree-cleanup.sh` per task（並列可）
 - **5.7 `step_checkpoint` 追記**（必須）:
 
