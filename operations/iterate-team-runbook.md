@@ -406,6 +406,8 @@ runlog 追記: `runtime_detected` / `{is_dev_container, mcp_profile}`（`--model
      必要なコミットを発行してから再実行してください。
      ```
 
+     なお SessionStart hook が seed する `.iterate-team/state/`（`escalation-template.md` / `sessions/<id>/init.json`）は、hook が seed 前に `.git/info/exclude` へ無視登録するため本 dirty check には現れない（初回インストールのクリーン checkout でも誤 abort しない。詳細は [`session-start-hook.md#runtime-state-の-git-無視登録`](<plugin_root>/operations/session-start-hook.md#runtime-state-の-git-無視登録)）。
+
    - **3.4 placeholder ブランチ名の確定**: `<integration-branch>` = `claude/iterate-team-<YYYYMMDDHHmm>-pending`（`<YYYYMMDDHHmm>` は `date +%Y%m%d%H%M`）。`Bash git rev-parse --verify "<integration-branch>"` が成功する場合は分単位の重複として `<YYYYMMDDHHmm>` を後置に `-<N>` を付加（N=2..5）して再試行。5 回試行しても空きが見つからない場合は `branch_name_conflict` 追記後ステップ 9（疑似 task-id `branch-bootstrap`）
 
    - **3.5 placeholder ブランチ作成**: `Bash git switch -c "<integration-branch>" "origin/<from_branch>"` を実行（`origin/<from_branch>` から新規ブランチを切ってチェックアウト）。**この瞬間以降 HEAD は `claude/*` で起動ブランチからは構造的に離れる**。失敗時は `branch_create_failed` / `{stderr}` 追記後処理中止

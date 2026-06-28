@@ -72,7 +72,7 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 
 - **プラグイン資産**（commands / agents / templates / operations / scripts / assets）はプラグインルート配下に置かれ、本文中では `<plugin_root>/...` で参照する。
 - **`<plugin_root>` の解決**: `${CLAUDE_PLUGIN_ROOT}` は hook / MCP コマンドの実行 env でのみ展開が保証され、agent / command の本文テキストでは展開されない。そのため SessionStart hook が `${CLAUDE_PLUGIN_ROOT}` を `init.json` の `plugin_root` に記録し、Orchestrator が step 0 で読み取って各 subagent プロンプトへ絶対パスを注入する。
-- **ランタイム状態**は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/` に作成される（SessionStart hook が seed）。`.iterate-team/state/` は gitignore 推奨。
+- **ランタイム状態**は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/` に作成される（SessionStart hook が seed）。このうちセッション固有の `.iterate-team/state/` は SessionStart hook が `.git/info/exclude` へ自動登録するため、初回インストールのクリーンな checkout でも `git status` を汚さず `/iterate-team` step 0 の dirty check を誤発火させない（`tasks/` / `changes/` は計画・ADR を含む追跡対象）。チームで共有したい場合は別途 `.gitignore` に `.iterate-team/state/` を追加してもよい（自動登録と重複しても害はない）。
 
 ## 前提
 

@@ -47,6 +47,58 @@ emit_context_only() {
   }'
 }
 
+# 対象リポジトリの runtime state (.iterate-team/state/) を git の無視対象へ登録する。
+#
+# Why: 本 hook は dirty check (`/iterate-team` step 0.1 の `git status --porcelain`) より前に
+# .iterate-team/state/ 配下へ escalation-template.md と sessions/<id>/init.json を seed する。
+# `.iterate-team/state/` をまだ無視していないクリーンな初回 checkout では、これらが untracked
+# として現れ、step 0 が `dirty_worktree` で abort してハーネスが起動不能になる。tracked な
+# .gitignore を書き換えると差分自体が dirty になるため、ローカル限定で git status に現れない
+# .git/info/exclude へ追記する。既に無視済み (.gitignore / グローバル設定 / 既存 exclude /
+# 親ディレクトリ ignore のいずれか) なら no-op。チーム共有したい場合は別途 .gitignore に
+# `.iterate-team/state/` を追加すればよい (本登録と重複しても害はない)。
+ensure_state_ignored() {
+  local project_dir="$1"
+  command -v git >/dev/null 2>&1 || return 0
+  git -C "$project_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+  # 既に無視対象なら追記しない。seed 前でも check-ignore はパターン評価できるため判定可
+  # (存在しないパスでも親 ignore や明示パターンに照らして判定される)。代表ファイルで確認する。
+  if git -C "$project_dir" check-ignore -q .iterate-team/state/escalation-template.md 2>/dev/null; then
+    return 0
+  fi
+
+  # exclude は common git dir 基準で解決する (linked worktree でも共有 exclude を指す)。
+  # --git-common-dir は main worktree では相対 (.git) を返すことがあるため絶対化する。
+  local git_dir
+  git_dir="$(git -C "$project_dir" rev-parse --git-common-dir 2>/dev/null || true)"
+  [ -n "$git_dir" ] || return 0
+  case "$git_dir" in
+    /*) : ;;
+    *) git_dir="$project_dir/$git_dir" ;;
+  esac
+  local exclude_file="$git_dir/info/exclude"
+
+  # exclude パターンは toplevel 相対。project_dir がサブディレクトリでも正しく anchor させるため
+  # show-prefix (toplevel からの相対パス, 末尾 /) を前置する。toplevel 直下なら空文字列。
+  local prefix
+  prefix="$(git -C "$project_dir" rev-parse --show-prefix 2>/dev/null || true)"
+  local pattern="/${prefix}.iterate-team/state/"
+
+  # 冪等: 既に同一行があれば追記しない。
+  if [ -f "$exclude_file" ] && grep -qxF "$pattern" "$exclude_file" 2>/dev/null; then
+    return 0
+  fi
+
+  mkdir -p "$git_dir/info" 2>/dev/null || return 0
+  # 末尾改行の無い既存 exclude に連結して直前パターンを壊さないよう、必要なら改行を先付けする。
+  if [ -s "$exclude_file" ] && [ -n "$(tail -c1 "$exclude_file" 2>/dev/null)" ]; then
+    printf '\n' >> "$exclude_file" 2>/dev/null || return 0
+  fi
+  printf '# iterate-team SessionStart hook が自動追記 (runtime state)\n%s\n' "$pattern" \
+    >> "$exclude_file" 2>/dev/null || return 0
+}
+
 if ! command -v jq >/dev/null 2>&1; then
   echo '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"[session-start-hook] jq が見つかりません。/iterate-* の初期化は失敗します。"}}'
   exit 1
@@ -65,6 +117,10 @@ case "$SESSION_ID" in
     exit 1
     ;;
 esac
+
+# runtime state を seed する前に .iterate-team/state/ を git の無視対象へ登録する
+# (seed が untracked 差分として step 0.1 dirty check を誤発火させるのを防ぐ)。
+ensure_state_ignored "$PROJECT_DIR"
 
 # runtime 状態ルートを seed (対象リポジトリ直下 .iterate-team/{state,tasks,changes})
 RUNTIME_ROOT="$PROJECT_DIR/.iterate-team"

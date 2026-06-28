@@ -89,7 +89,7 @@ git rev-parse --show-toplevel
 6. **実装中 advisor トリガー判定**（フェーズ B 内のあらゆる時点で適用、後述「フェーズ B 中の実装中 advisor request」セクション）。トリガー成立時は単発 advisor request を書き出して **即 1 起動完了**（再実装には進まない）
 7. 実装する。`Write` `Edit` で差分を作る（**worktree 内の変更のみ**。state ファイルへの書込はステップ 8 の git add 対象外）
 8. **ステップ後の検証**: プロジェクトの型チェックコマンド（型付き言語の場合）/ lint コマンド / 必要に応じてテストコマンドを worktree 内で実行する。エラーが出た場合はその場で修正してから次ステップに進む。**ここで実装中 advisor トリガーが追加発火した場合（例: 検証中に発見した新規パターン）も即 advisor request 経路へ移行**してよい
-9. 変更ファイルを個別に `git add <file>` する（`git add -A` 禁止）。範囲は **worktree 内の変更のみ**で、`.iterate-team/state/...` への書込は対象外（state は `.gitignore` 対象なので git も無視する）
+9. 変更ファイルを個別に `git add <file>` する（`git add -A` 禁止）。範囲は **worktree 内の変更のみ**で、`.iterate-team/state/...` への書込は対象外（state は git 無視対象 — SessionStart hook が `.git/info/exclude` へ登録 — なので git も追跡しない）
 10. `git commit -m "..."` で worktree のブランチ（`<task-branch>` = `team-task/<session-id>/<task-id>`）にコミット。フッタに `Refs: task-x_y_z` を必ず含める
 11. 戻り値に「フェーズ B 完了: コミット完了。Orchestrator は検収レビュー（Evaluator 先行ゲート → APPROVED 後に Code Review）を起動してください」と Orchestrator に通知する
 

@@ -8,6 +8,20 @@ iterate-team ハーネスのセッション初期化を Claude Code の `Session
 - 同一 checkout で複数セッションが並走しても、相互に判定を上書きしないよう **Claude Code 側 session_id でスコープ** する
 - 固定パス (`.iterate-team/state/session-init.json` のような単一ファイル方式) は採用しない
 - プラグイン資産ルート `${CLAUDE_PLUGIN_ROOT}` を `init.json` の `plugin_root` に記録し、Orchestrator が各 subagent プロンプトへ絶対パスを注入できるようにする（`${CLAUDE_PLUGIN_ROOT}` は agent/command 本文では展開保証されないため、hook 経由で永続化する）
+- ランタイム状態 `.iterate-team/state/` を `seed` する前に対象リポジトリの `.git/info/exclude` へ無視登録し、`/iterate-team` step 0.1 の `git status --porcelain` dirty check を seed 自身が誤発火させないようにする（後述「runtime state の git 無視登録」）
+
+## runtime state の git 無視登録
+
+本 hook は `.iterate-team/state/` 配下に `escalation-template.md`（state-prune の削除ガードマーカー）と `sessions/<claude-session-id>/init.json` を seed する。`/iterate-team` step 0.1 は新規起動時に `git status --porcelain` で working tree のクリーンさを確認し、汚れていれば `dirty_worktree` で abort する。そのため `.iterate-team/state/` をまだ無視していないクリーンな初回 checkout では、seed した state ファイルが untracked 差分として現れ、ハーネスが起動不能になる。
+
+これを防ぐため、hook は seed の直前に `ensure_state_ignored` を実行する:
+
+- 対象が git work tree でなければ no-op（seed のみ実行）
+- 既に無視済み（`.gitignore` / グローバル設定 / 既存 `info/exclude` / 親ディレクトリ ignore のいずれか。`git check-ignore` で判定）なら no-op
+- それ以外は **`.git/info/exclude`**（`--git-common-dir` 基準で解決。linked worktree でも共有 exclude を指す）へ `/<prefix>.iterate-team/state/` を 1 行追記する。`<prefix>` は `git rev-parse --show-prefix`（toplevel からの相対）で、`${CLAUDE_PROJECT_DIR}` がサブディレクトリでも正しく anchor する
+- 冪等: 同一パターン行が既にあれば再追記しない（複数セッション・再起動で二重登録しない）
+
+tracked な `.gitignore` ではなく `info/exclude` を使う理由は、`.gitignore` への書き込み自体が dirty 差分になり同じ問題を再発させるため、かつ無視登録はインストール先ローカル限定で十分なため。チームで `.iterate-team/state/` を共有 ignore したい場合は別途 `.gitignore` に追加してよい（本登録と重複しても害はない）。`tasks/` / `changes/` は計画・ADR 等の追跡対象であり無視登録しない。
 
 ## 構成
 
@@ -21,6 +35,7 @@ iterate-team ハーネスのセッション初期化を Claude Code の `Session
 ${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh
   ├─ stdin: Claude Code が SessionStart で渡す JSON ({session_id, model, source, ...})
   ├─ env: ${CLAUDE_PLUGIN_ROOT}（プラグイン資産ルート）/ ${CLAUDE_PROJECT_DIR}（対象リポジトリルート）
+  ├─ ignore: seed 前に .iterate-team/state/ を .git/info/exclude へ無視登録（git 管理時のみ・冪等）
   ├─ seed: 対象リポジトリ直下に .iterate-team/{state,tasks,changes} を作成
   ├─ 永続化先: .iterate-team/state/sessions/<claude-session-id>/init.json
   └─ stdout: { hookSpecificOutput: { hookEventName: "SessionStart",
