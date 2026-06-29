@@ -1,0 +1,33 @@
+{
+  "name": "iterate-team-plugin",
+  "version": "0.1.0",
+  "description": "agent team 並列マルチエージェント・ハーネス（Claude Code プラグイン）。言語・スタック非依存。",
+  "type": "module",
+  "bin": {
+    "iterate-team-plugin": "bin/cli.mjs"
+  },
+  "files": [
+    ".claude-plugin/",
+    "agents/",
+    "commands/",
+    "templates/",
+    "operations/",
+    "scripts/",
+    "assets/",
+    "bin/",
+    "README.md",
+    "settings.sample.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "agent",
+    "multi-agent",
+    "orchestration",
+    "harness"
+  ]
+}
