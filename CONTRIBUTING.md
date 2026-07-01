@@ -27,7 +27,7 @@ cd iterate-team-plugin
 scripts/build-agents.sh           # templates/ から agents/ を生成
 scripts/build-agents.sh --check   # ドリフト検出（pre-commit 用・生成物とテンプレの不一致を検査）
 scripts/validate-agents.sh        # ドリフト + 共通句重複検査
-bash scripts/__tests__/*.test.sh  # シェルユニットテスト
+scripts/run-tests.sh              # シェルユニットテストを全件個別実行（1 本でも落ちれば非ゼロ終了）
 ```
 
 - テンプレ文法（プレースホルダ `{{NAME}}` / `{{HARNESS}}`、条件ブロック `@if`、共通断片 `@ref`）と新規 agent の追加手順は [`templates/README.md`](./templates/README.md) を参照。
@@ -38,7 +38,7 @@ bash scripts/__tests__/*.test.sh  # シェルユニットテスト
 1. 作業ブランチを切る（`main` へ直接コミットしない）。
 2. テンプレート（`templates/`）を編集し、`scripts/build-agents.sh` で `agents/` を再生成する。
 3. コミット前に `scripts/build-agents.sh --check` と `scripts/validate-agents.sh` を通し、ドリフトが無いことを確認する。
-4. `bash scripts/__tests__/*.test.sh` でシェルユニットテストを通す。
+4. `scripts/run-tests.sh` でシェルユニットテスト（全件）を通す。
 5. **`git add` はファイル個別指定**で行う（`git add .` / `git add -A` は使わない）。生成物 1 件とテンプレ 1 件をセットでコミットする。
 6. コミットメッセージは既存の履歴（`add:` / `fix:` 等の接頭辞）に倣う。
 
@@ -46,7 +46,7 @@ bash scripts/__tests__/*.test.sh  # シェルユニットテスト
 
 - [ ] `scripts/build-agents.sh --check` が green（生成物とテンプレが一致）
 - [ ] `scripts/validate-agents.sh` が green
-- [ ] `bash scripts/__tests__/*.test.sh` が green
+- [ ] `scripts/run-tests.sh` が green（全 test を個別実行）
 - [ ] `agents/*.md` を手編集していない（テンプレ経由の再生成のみ）
 
 ## 公開・リリース

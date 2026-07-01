@@ -19,7 +19,7 @@
   ```
   scripts/build-agents.sh --check
   scripts/validate-agents.sh
-  bash scripts/__tests__/*.test.sh
+  scripts/run-tests.sh
   ```
 
 - [ ] **JSON 妥当性**:
