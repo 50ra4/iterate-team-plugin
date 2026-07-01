@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "agent team 並列マルチエージェント・ハーネス。要望文から計画を作成し、独立タスクを git worktree で分離して並列実装、検収は Evaluator 先行→APPROVED 後に Code Review の逐次ゲート、PR を自動作成する。言語・スタック非依存。",
   "author": {
-    "name": "iterate-team contributors"
+    "name": "50ra4",
+    "url": "https://github.com/50ra4"
   },
   "license": "MIT",
   "keywords": [

@@ -16,7 +16,10 @@ iterate-team-plugin/
 ├── scripts/               # build-agents / session-start / runlog / worktree / state-prune ほか
 ├── assets/                # notify.wav（回答待ち通知音）
 ├── bin/cli.mjs            # 登録ヘルパ CLI（npm 経路）
-└── package.json
+├── settings.sample.json   # 対象リポへマージする権限サンプル
+├── package.json           # npm 配布定義
+├── CONTRIBUTING.md        # 開発・コントリビュートガイド
+└── PUBLISHING.md          # 公開・リリース手順（メンテナ向け）
 ```
 
 ## インストール
@@ -24,11 +27,11 @@ iterate-team-plugin/
 ### A. Claude Code プラグインとして（推奨）
 
 ```
-/plugin marketplace add /absolute/path/to/iterate-team-plugin
+/plugin marketplace add 50ra4/iterate-team-plugin
 /plugin install iterate-team@iterate-team
 ```
 
-（git リポジトリで配布する場合は `/plugin marketplace add <git-url>` も可。）
+（ローカルの clone を使う場合は `/plugin marketplace add /absolute/path/to/iterate-team-plugin` も可。）
 
 ### B. npm 経由
 
@@ -81,15 +84,9 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 - ハーネスは Sonnet 系モデルで検証されている（SessionStart hook が Opus 系を検出すると警告）。
 - Codex MCP（`mcp__codex__codex`）と Chrome DevTools MCP は任意。利用可能なら計画 / コードレビューと UI 検収で使われ、無ければサブエージェント（`team-reviewer-plan` / `team-reviewer-code`）で代替する。
 
-## 開発（メンテナ向け）
+## ドキュメント
 
-agent 定義は `templates/_base/*.md`（+ `_partials/`）を Single Source of Truth として生成する。**`agents/*.md` を直接編集しない**。
-
-```
-scripts/build-agents.sh           # templates/ から agents/ を生成
-scripts/build-agents.sh --check   # ドリフト検出（pre-commit 用）
-scripts/validate-agents.sh        # ドリフト + 共通句重複検査
-bash scripts/__tests__/*.test.sh  # シェルユニットテスト
-```
-
-詳細仕様は `templates/README.md`（build 機構）と `operations/`（運用 runbook）を参照。
+- **開発・コントリビュート**: [`CONTRIBUTING.md`](./CONTRIBUTING.md)（agent 定義の生成規約・build/validate・テスト・変更の出し方）
+- **公開・リリース手順（メンテナ向け）**: [`PUBLISHING.md`](./PUBLISHING.md)（npm / plugin marketplace / GitHub Release）
+- **build 機構の詳細**: [`templates/README.md`](./templates/README.md)
+- **運用 runbook・スキーマ・障害対応**: [`operations/`](./operations/)
