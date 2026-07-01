@@ -96,23 +96,39 @@ Anthropic 管理の [`anthropics/claude-plugins-official`](https://github.com/an
 
 SemVer でバージョンタグを打ち、Release notes を CHANGELOG 代わりにする。
 
-1. バージョンを上げてタグを生成（`package.json` を書き換え、コミット + タグを作成）:
+> **重要**: `npm version <patch|minor|major>` は既定で `package.json` の書き換えと**同時にコミットとタグを作成**する（`--no-git-tag-version` を付けない限り）。そのため後から `.claude-plugin/plugin.json` を同じコミットへ含められず、npm のバージョン/タグだけが進んで plugin manifest が古いまま取り残されうる。plugin marketplace が利用者へ更新を配るかは `plugin.json` の `version` で決まるので、**両 manifest を揃えてから**コミット/タグを打つこと。以下は `--no-git-tag-version` でタグを作らずに `package.json` だけ更新し、`plugin.json` を合わせてから手動でコミット/タグする手順。
+
+1. `package.json` の `version` だけを更新する（コミット・タグはまだ作らない）:
 
    ```
-   npm version <patch|minor|major>
+   npm version <patch|minor|major> --no-git-tag-version
    ```
 
-   ※ `.claude-plugin/plugin.json` の `version` は自動更新されないため、手動で同じ値に合わせてからコミットに含める。
+2. `.claude-plugin/plugin.json` の `version` を `package.json` と同じ値に合わせる（`npm version` は plugin.json を更新しない）:
 
-2. push:
+   ```
+   VERSION=$(node -p "require('./package.json').version")
+   jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp \
+     && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json
+   ```
+
+3. 両 manifest をまとめてコミットし、同じ version で**注釈付きタグ**を打つ（`--follow-tags` は注釈付きタグのみ push するため）:
+
+   ```
+   git add package.json .claude-plugin/plugin.json
+   git commit -m "release: v$VERSION"
+   git tag -a "v$VERSION" -m "v$VERSION"
+   ```
+
+4. push:
 
    ```
    git push --follow-tags
    ```
 
-3. GitHub でタグから Release を作成し、変更点を記述する。
+5. GitHub でタグから Release を作成し、変更点を記述する。
 
-**リリースの推奨順序**: `0` のチェック → バージョン更新（タグ）→ `git push --follow-tags` → npm publish → GitHub Release 作成。これで「npm 上のバージョン」「git タグ」「Release」が揃う。
+**リリースの推奨順序**: `0` のチェック → `package.json` / `plugin.json` の version を揃える（`--no-git-tag-version`）→ コミット + 注釈付きタグ → `git push --follow-tags` → npm publish → GitHub Release 作成。これで「npm 上のバージョン」「git タグ」「`plugin.json`」「Release」がすべて揃う。
 
 ---
 
