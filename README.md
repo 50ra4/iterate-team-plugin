@@ -16,7 +16,10 @@ iterate-team-plugin/
 ├── scripts/               # build-agents / session-start / runlog / worktree / state-prune ほか
 ├── assets/                # notify.wav（回答待ち通知音）
 ├── bin/cli.mjs            # 登録ヘルパ CLI（npm 経路）
-└── package.json
+├── settings.sample.json   # 対象リポへマージする権限サンプル
+├── package.json           # npm 配布定義
+├── CONTRIBUTING.md        # 開発・コントリビュートガイド
+└── PUBLISHING.md          # 公開・リリース手順（メンテナ向け）
 ```
 
 ## インストール
@@ -24,11 +27,11 @@ iterate-team-plugin/
 ### A. Claude Code プラグインとして（推奨）
 
 ```
-/plugin marketplace add /absolute/path/to/iterate-team-plugin
+/plugin marketplace add 50ra4/iterate-team-plugin
 /plugin install iterate-team@iterate-team
 ```
 
-（git リポジトリで配布する場合は `/plugin marketplace add <git-url>` も可。）
+（ローカルの clone を使う場合は `/plugin marketplace add /absolute/path/to/iterate-team-plugin` も可。）
 
 ### B. npm 経由
 
@@ -44,11 +47,15 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 
 ハーネスは対象リポジトリの `.claude/settings.json` に**特定の権限**が入っていることを前提に動く。Claude Code プラグインは `plugin.json` で `permissions` を宣言できない（同梱 `settings.json` も `agent` / `subagentStatusLine` キーのみ有効）ため、以下を**対象リポ側で手動設定**する。未設定だと、ハーネス用 Bash の都度プロンプトが多発し、かつ直接 `git push` を塞ぐ構造防御が効かない。
 
-1. プラグインルートの絶対パスを取得する。
+1. プラグインルートの絶対パスを取得する。この値は **ハーネスが実行時に使う `${CLAUDE_PLUGIN_ROOT}` と一致**させる必要がある。marketplace 経由（A）でインストールすると Claude Code はプラグインを `~/.claude/plugins/` 配下（キャッシュ）へコピーし、`${CLAUDE_PLUGIN_ROOT}` はそのコピー先を指す。これは npm パッケージのパス（`npx iterate-team-plugin path` が返す値）とは異なるため、marketplace インストールで後者を貼ると allow ルールが実行時のコマンド文字列に一致せず、push ラッパー／補助スクリプトがプロンプト化・失敗する。
+
+   最も確実な取得方法は、**一度 Claude Code セッションを開始**（SessionStart hook が `init.json` を seed する。権限未設定でも hook は実行される）したうえで、記録された `plugin_root` を読むこと:
 
    ```
-   npx iterate-team-plugin path
+   jq -r '.plugin_root' .iterate-team/state/sessions/*/init.json | sort -u
    ```
+
+   npm / ローカル clone を直接プラグインルートに指定する構成に限り、`npx iterate-team-plugin path` でも取得できる。`/plugin marketplace update` 等でインストール先が変わった場合は、この値を取り直して置換し直すこと。
 
 2. 同梱の [`settings.sample.json`](./settings.sample.json) を対象リポの `.claude/settings.json`（または `settings.local.json`）の `permissions` へマージする。サンプル内の `<PLUGIN_ROOT>` を手順 1 の絶対パスに置換する。
 
@@ -81,15 +88,9 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 - ハーネスは Sonnet 系モデルで検証されている（SessionStart hook が Opus 系を検出すると警告）。
 - Codex MCP（`mcp__codex__codex`）と Chrome DevTools MCP は任意。利用可能なら計画 / コードレビューと UI 検収で使われ、無ければサブエージェント（`team-reviewer-plan` / `team-reviewer-code`）で代替する。
 
-## 開発（メンテナ向け）
+## ドキュメント
 
-agent 定義は `templates/_base/*.md`（+ `_partials/`）を Single Source of Truth として生成する。**`agents/*.md` を直接編集しない**。
-
-```
-scripts/build-agents.sh           # templates/ から agents/ を生成
-scripts/build-agents.sh --check   # ドリフト検出（pre-commit 用）
-scripts/validate-agents.sh        # ドリフト + 共通句重複検査
-bash scripts/__tests__/*.test.sh  # シェルユニットテスト
-```
-
-詳細仕様は `templates/README.md`（build 機構）と `operations/`（運用 runbook）を参照。
+- **開発・コントリビュート**: [`CONTRIBUTING.md`](./CONTRIBUTING.md)（agent 定義の生成規約・build/validate・テスト・変更の出し方）
+- **公開・リリース手順（メンテナ向け）**: [`PUBLISHING.md`](./PUBLISHING.md)（npm / plugin marketplace / GitHub Release）
+- **build 機構の詳細**: [`templates/README.md`](./templates/README.md)
+- **運用 runbook・スキーマ・障害対応**: [`operations/`](./operations/)

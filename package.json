@@ -3,6 +3,18 @@
   "version": "0.1.0",
   "description": "agent team 並列マルチエージェント・ハーネス（Claude Code プラグイン）。言語・スタック非依存。",
   "type": "module",
+  "author": {
+    "name": "50ra4",
+    "url": "https://github.com/50ra4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/50ra4/iterate-team-plugin.git"
+  },
+  "homepage": "https://github.com/50ra4/iterate-team-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/50ra4/iterate-team-plugin/issues"
+  },
   "bin": {
     "iterate-team-plugin": "bin/cli.mjs"
   },
