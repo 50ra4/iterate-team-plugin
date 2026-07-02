@@ -7,10 +7,16 @@
   //   操作・状態書き込みを allow し、直接 push を構造的に塞ぐ。
   //
   // <PLUGIN_ROOT> の解決:
-  //   Claude Code の permissions は ${CLAUDE_PLUGIN_ROOT} を展開しないため、
-  //   下記 <PLUGIN_ROOT> は実体の絶対パスに置換すること。絶対パスは次で取得できる:
-  //       npx iterate-team-plugin path
-  //   （例: /Users/you/.claude/plugins/iterate-team）
+  //   Claude Code の permissions は ${CLAUDE_PLUGIN_ROOT} を展開しないため、下記 <PLUGIN_ROOT>
+  //   は実体の絶対パスに置換すること。この値は「ハーネスが実行時に使う ${CLAUDE_PLUGIN_ROOT}」
+  //   と一致させる必要がある。marketplace 経由インストールでは Claude Code がプラグインを
+  //   ~/.claude/plugins/ 配下（キャッシュ）へコピーし、${CLAUDE_PLUGIN_ROOT} はそのコピー先を
+  //   指すため、npm パッケージのパス（npx iterate-team-plugin path）とは一致しない。後者を貼ると
+  //   下記 allow ルールが実行時コマンドに一致せず、push ラッパー等がプロンプト化・失敗する。
+  //   最も確実な取得方法は、一度セッションを開始した後に SessionStart hook が記録した
+  //   init.json の plugin_root を読むこと（marketplace / npm / ローカル clone いずれでも正しい）:
+  //       jq -r '.plugin_root' .iterate-team/state/sessions/*/init.json | sort -u
+  //   npm / ローカル clone を直接指す構成に限り npx iterate-team-plugin path も使える。
   //
   // 設計意図（push 経路の構造防御）:
   //   push は <PLUGIN_ROOT>/scripts/team-push-branch.sh ラッパー経由のみを無プロンプト

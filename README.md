@@ -47,11 +47,15 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 
 ハーネスは対象リポジトリの `.claude/settings.json` に**特定の権限**が入っていることを前提に動く。Claude Code プラグインは `plugin.json` で `permissions` を宣言できない（同梱 `settings.json` も `agent` / `subagentStatusLine` キーのみ有効）ため、以下を**対象リポ側で手動設定**する。未設定だと、ハーネス用 Bash の都度プロンプトが多発し、かつ直接 `git push` を塞ぐ構造防御が効かない。
 
-1. プラグインルートの絶対パスを取得する。
+1. プラグインルートの絶対パスを取得する。この値は **ハーネスが実行時に使う `${CLAUDE_PLUGIN_ROOT}` と一致**させる必要がある。marketplace 経由（A）でインストールすると Claude Code はプラグインを `~/.claude/plugins/` 配下（キャッシュ）へコピーし、`${CLAUDE_PLUGIN_ROOT}` はそのコピー先を指す。これは npm パッケージのパス（`npx iterate-team-plugin path` が返す値）とは異なるため、marketplace インストールで後者を貼ると allow ルールが実行時のコマンド文字列に一致せず、push ラッパー／補助スクリプトがプロンプト化・失敗する。
+
+   最も確実な取得方法は、**一度 Claude Code セッションを開始**（SessionStart hook が `init.json` を seed する。権限未設定でも hook は実行される）したうえで、記録された `plugin_root` を読むこと:
 
    ```
-   npx iterate-team-plugin path
+   jq -r '.plugin_root' .iterate-team/state/sessions/*/init.json | sort -u
    ```
+
+   npm / ローカル clone を直接プラグインルートに指定する構成に限り、`npx iterate-team-plugin path` でも取得できる。`/plugin marketplace update` 等でインストール先が変わった場合は、この値を取り直して置換し直すこと。
 
 2. 同梱の [`settings.sample.json`](./settings.sample.json) を対象リポの `.claude/settings.json`（または `settings.local.json`）の `permissions` へマージする。サンプル内の `<PLUGIN_ROOT>` を手順 1 の絶対パスに置換する。
 
