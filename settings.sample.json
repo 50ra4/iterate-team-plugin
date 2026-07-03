@@ -52,6 +52,9 @@
       "Bash(<PLUGIN_ROOT>/scripts/team-worktree-merge.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-worktree-cleanup.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-push-branch.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-append.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-digest.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-prune.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",
@@ -73,7 +76,11 @@
 
       // (4) ハーネス状態の書き込み（対象リポ直下 .iterate-team/state/ 配下）
       "Write(.iterate-team/state/*/**)",
-      "Edit(.iterate-team/state/*/**)"
+      "Edit(.iterate-team/state/*/**)",
+
+      // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
+      "Write(.iterate-team/knowledge/**)",
+      "Edit(.iterate-team/knowledge/**)"
     ],
     "deny": [
       // push 経路の防御: 直接 git push の主要な破壊的形態を deny する。
