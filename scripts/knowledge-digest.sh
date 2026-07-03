@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# knowledge（クロスセッション自己学習）機構の lessons.md 決定的再生成スクリプト。
+#
+# Usage:
+#   <plugin_root>/scripts/knowledge-digest.sh
+#
+# 動作:
+#   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl を読み、lessons.md を
+#     決定的に再生成する（掲載規則は knowledge-policy.md §4 の確定値）。
+#       - 同一 id は最終行勝ち
+#       - status=active のみ掲載
+#       - 選定順: confidence desc（high > medium > low） → applied_count desc → ts desc
+#       - 全体最大 20 件・セクションあたり最大 8 件（全体上位 20 件を先に確定し、
+#         その中からセクション振り分け後に各セクション 8 件で切る）
+#       - target_agents に "*" を含むレコードは「共通（全 agent）」のみに掲載し、
+#         agent 別セクションには重複掲載しない
+#   - 既存 lessons.md があれば <!-- manual:start -->〜<!-- manual:end --> ブロックを
+#     抽出して末尾に温存する（無ければ空の manual ブロックを生成する）
+#   - lessons.jsonl が無い/空でも空セクションの骨格を生成する
+#   - tmp ファイルに書いて mv で原子的に置換する
+#
+# 仕様の正本: <plugin_root>/operations/knowledge-policy.md（§4）
+
+set -euo pipefail
+
+if [[ $# -ne 0 ]]; then
+  echo "Usage: $0" >&2
+  exit 1
+fi
+
+# repo_root は対象プロジェクト基準で解決する（runlog-append.sh と同一規約）。
+repo_root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+knowledge_dir="${repo_root}/.iterate-team/knowledge"
+lessons_jsonl="${knowledge_dir}/lessons.jsonl"
+lessons_md="${knowledge_dir}/lessons.md"
+
+mkdir -p "$knowledge_dir"
+
+# agent 別セクションの表示順（knowledge-policy.md §4 の確定順）
+AGENT_SECTIONS=(team-planner team-generator team-evaluator team-interviewer team-test-coder)
+
+# ---- 既存 manual ブロックの抽出（温存対象） ----
+extract_manual_block() {
+  if [[ -f "$lessons_md" ]]; then
+    awk '
+      /<!-- manual:start -->/ { flag=1 }
+      flag { print }
+      /<!-- manual:end -->/ { flag=0 }
+    ' "$lessons_md"
+  fi
+}
+
+manual_block="$(extract_manual_block)"
+if [[ -z "$manual_block" ]]; then
+  manual_block=$'<!-- manual:start -->\n<!-- manual:end -->'
+fi
+
+# ---- 全体上位 20 件プール算出（status=active、同一 id 最終行勝ち） ----
+# lessons.jsonl が無い/空なら空プール。
+if [[ -s "$lessons_jsonl" ]]; then
+  pool="$(jq -s '
+    group_by(.id)
+    | map(last)
+    | map(select(.status == "active"))
+    | map(. + {_rank: (if .confidence == "high" then 3
+                        elif .confidence == "medium" then 2
+                        else 1 end)})
+    | sort_by(._rank, (.applied_count // 0), .ts)
+    | reverse
+    | .[0:20]
+  ' "$lessons_jsonl" 2>/dev/null || echo '[]')"
+else
+  pool='[]'
+fi
+
+# ---- セクション整形ヘルパー ----
+# 引数: フィルタ済み JSON 配列（jq）。1 件 1 行 "- [id] lesson" を出力する。
+# 空配列なら "(なし)" の 1 行を出力する。
+format_section() {
+  local json="$1"
+  local count
+  count="$(printf '%s' "$json" | jq 'length')"
+  if [[ "$count" -eq 0 ]]; then
+    echo "(なし)"
+  else
+    printf '%s' "$json" | jq -r '.[] | "- [" + .id + "] " + .lesson'
+  fi
+}
+
+# 共通（"*" を含む）: セクションあたり最大 8 件
+common_json="$(printf '%s' "$pool" | jq '
+  [.[] | select(.target_agents | index("*") != null)] | .[0:8]
+')"
+
+# ---- tmp ファイルへ書き出し、mv で原子的置換 ----
+tmp_file="$(mktemp "${knowledge_dir}/.lessons.md.XXXXXX")"
+cleanup_tmp() {
+  [[ -f "$tmp_file" ]] && rm -f "$tmp_file"
+}
+trap cleanup_tmp EXIT
+
+{
+  echo "# 知見ダイジェスト（自動生成）"
+  echo ""
+  echo "knowledge-digest.sh が再生成する。手編集は manual ブロック内のみ。"
+  echo ""
+  echo "## 共通（全 agent）"
+  format_section "$common_json"
+  echo ""
+
+  for agent in "${AGENT_SECTIONS[@]}"; do
+    agent_json="$(printf '%s' "$pool" | jq --arg a "$agent" '
+      [.[] | select((.target_agents | index("*") == null) and (.target_agents | index($a) != null))] | .[0:8]
+    ')"
+    echo "## ${agent}"
+    format_section "$agent_json"
+    echo ""
+  done
+
+  printf '%s\n' "$manual_block"
+} > "$tmp_file"
+
+mv "$tmp_file" "$lessons_md"
+trap - EXIT
+
+echo "knowledge-digest.sh: regenerated $lessons_md"

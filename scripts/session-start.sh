@@ -125,7 +125,11 @@ ensure_state_ignored "$PROJECT_DIR"
 # runtime 状態ルートを seed (対象リポジトリ直下 .iterate-team/{state,tasks,changes})
 RUNTIME_ROOT="$PROJECT_DIR/.iterate-team"
 STATE_ROOT="$RUNTIME_ROOT/state"
-mkdir -p "$STATE_ROOT" "$RUNTIME_ROOT/tasks" "$RUNTIME_ROOT/changes"
+# knowledge/ は state/ と異なり git-tracked 資産 (knowledge-policy.md 参照)。
+# ここで untracked ファイルを seed すると step 0.1 の dirty check (git status --porcelain)
+# を誤発火させるため、ディレクトリの mkdir のみ行いファイルは一切 seed しない
+# (lessons.jsonl 等は knowledge-append.sh が書き込み時に冪等 seed する)。
+mkdir -p "$STATE_ROOT" "$RUNTIME_ROOT/tasks" "$RUNTIME_ROOT/changes" "$RUNTIME_ROOT/knowledge"
 
 # state root マーカー (state-prune.sh の破壊的削除ガードが必須とする保持対象ファイル)。
 # 既存があれば温存し、無ければ空マーカーを seed する。

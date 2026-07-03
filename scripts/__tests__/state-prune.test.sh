@@ -589,6 +589,39 @@ assert_path_exists "checkout 外の超過ディレクトリが誤削除されず
 
 rm -rf "$T14_REPO" "$T14_FAKE"
 
+# ========== T15: knowledge/ は state-prune の対象外で --apply 後も残存する ==========
+# .iterate-team/knowledge/ は state root の外にある git-tracked 資産（knowledge-policy.md
+# §2「state-prune.sh との関係」参照）。state-prune.sh の prune スコープは .iterate-team/state/
+# 配下のみのため、knowledge/ 配下のファイルは --apply 後も一切変更されないことを検証する。
+run_case "T15: .iterate-team/knowledge/ 配下のファイルは state-prune --apply 後も残存する"
+
+T15_REPO="$(make_isolated_repo)"
+T15_STATE="$T15_REPO/.iterate-team/state"
+make_state_root "$T15_STATE"
+
+OLD_SESSION15="$T15_STATE/team_to_delete_t15"
+mkdir -p "$OLD_SESSION15"
+set_mtime "$OLD_SESSION15" "$(past_epoch_over_retention)"
+
+# knowledge/ は state root の兄弟ディレクトリ（.iterate-team 配下・state の外）
+T15_KNOWLEDGE="$T15_REPO/.iterate-team/knowledge"
+mkdir -p "$T15_KNOWLEDGE"
+echo '{"id":"L-t15","status":"active"}' > "$T15_KNOWLEDGE/lessons.jsonl"
+# 保持期間超過相当の古い mtime を付けても prune スコープ外なので影響しないはず
+set_mtime "$T15_KNOWLEDGE/lessons.jsonl" "$(past_epoch_over_retention)"
+
+set +e
+stdout=$(cd "$T15_REPO" && bash "$TARGET" --state-root "$T15_STATE" --apply 2>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 0（--apply 成功）" "0" "$exit_code"
+assert_path_not_exists "state 側の超過セッションは削除される" "$OLD_SESSION15"
+assert_path_exists "knowledge/lessons.jsonl は削除されず残存する" "$T15_KNOWLEDGE/lessons.jsonl"
+assert_eq "knowledge/lessons.jsonl の内容は変更されない" '{"id":"L-t15","status":"active"}' "$(cat "$T15_KNOWLEDGE/lessons.jsonl")"
+
+rm -rf "$T15_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

@@ -213,6 +213,21 @@ assert_contains "state パターンも独立行として追記される" "$STATE
 # 連結事故（*.log/.iterate-team/state/）が起きていないことを確認
 assert_not_contains "直前パターンと連結していない" "*.log/.iterate-team" "$T6_EXCLUDE_BODY"
 
+# ========== T7: knowledge/ ディレクトリのみ mkdir し、ファイルは一切 seed しない ==========
+# knowledge/ は git-tracked 資産（state/ と異なり exclude しない）。ファイルまで seed すると
+# untracked 差分として step 0.1 の dirty check を誤発火させるため、ディレクトリの mkdir のみ
+# 行い、ファイルは knowledge-append.sh が書き込み時に冪等 seed する設計であることを検証する。
+run_case "T7: seed 後に knowledge/ ディレクトリが存在し、かつファイルが 1 つも seed されない"
+
+T7_REPO="$(make_isolated_repo)"
+run_hook "$T7_REPO" "team-session-t7"
+
+T7_KNOWLEDGE="$T7_REPO/.iterate-team/knowledge"
+assert_path_exists "knowledge/ ディレクトリが seed される" "$T7_KNOWLEDGE"
+
+T7_ENTRY_COUNT="$(find "$T7_KNOWLEDGE" -mindepth 1 | wc -l)"
+assert_eq "knowledge/ 配下にファイル/ディレクトリが 1 つも seed されない" "0" "$T7_ENTRY_COUNT"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"
