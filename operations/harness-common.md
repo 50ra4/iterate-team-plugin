@@ -16,6 +16,26 @@
 > - **Draft PR の作成は同一 session 内で 1 回のみ**（修正フロー後の再走行時は同一 PR の本文を更新する）
 > - 並列度上限 `team_max_parallel = 4`（Sonnet rate-limit / I/O 競合 / Codex MCP 同時セッション安全側）
 
+## knowledge ダイジェスト注入（全コマンド共通）
+
+確定値の正本は [`knowledge-policy.md#7-注入規約`](./knowledge-policy.md#7-注入規約)。本節は Orchestrator 側の共通手順のみを扱う。
+
+Orchestrator はステップ 0.0（session-init 取得）で `<knowledge_digest_path>` = `<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パスを in-memory 保持する。**ファイル不在でもパスは保持したまま進む**（存在チェックは行わない。注入対象 agent 側が `Read` 失敗時に黙って skip する規約のため）。
+
+注入対象は以下の 5 agent に限定する（prompt bloat 抑制）。
+
+- `team-planner`
+- `team-generator`
+- `team-evaluator`
+- `team-interviewer`
+- `team-test-coder`
+
+上記 5 agent の**すべての起動プロンプト**（初回起動・再起動・差し戻し起動を問わず）に `knowledge_digest_path=<絶対パス>` を、`plugin_root=<絶対パス>` と同じ注入規約で含める。それ以外の agent（`team-closer` / `team-refactor` / `team-advisor-*` / `team-publisher` / `team-reviewer-*` / Codex 系等）には注入しない。
+
+agent 側の適用規則（対象セクションの限定・タスク仕様との矛盾時の劣後・`lesson_applied` の記録条件）は [`templates/_partials/knowledge-injection.md`](../templates/_partials/knowledge-injection.md) を参照。
+
+> **team 固有**: knowledge への書き込み主体はステップ 6.7（軽量レトロスペクティブ）と `/iterate-retrospect`（deep レトロスペクティブ）の `team-retrospector` のみに限定される。詳細は `iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ` を参照。
+
 ## 引数
 
 要望文: `$ARGUMENTS`

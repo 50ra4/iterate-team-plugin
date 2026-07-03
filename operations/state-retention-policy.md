@@ -25,6 +25,8 @@
 1. **ハーネスセッションディレクトリ**（`team_*` / レガシー形式等、`sessions/<uuid>/` 以外の state 直下ディレクトリ）
 2. **`sessions/<uuid>/`** 配下のエントリ（Claude セッション単位のランタイム状態）
 
+`.iterate-team/knowledge/` は `.iterate-team/state/` 配下ではなく git-tracked 資産（`tasks/` / `changes/` と同格）であるため、本ポリシーおよび `state-prune.sh` の prune スコープに**構造的に含まれない**。保持・削除基準の正本は [`knowledge-policy.md`](./knowledge-policy.md)（`knowledge-prune.sh --compact --apply` が別途担う）。
+
 ## 保護対象（常に削除から除外）
 
 以下は保持基準にかかわらず削除から除外する。

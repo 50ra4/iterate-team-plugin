@@ -28,6 +28,8 @@
 - タスク実装コミット: `Refs: task-x_y_z`
 - Plan コミット: `Refs: plan-<yyyyMMdd_topic-slug>`
 - チェックリスト一括コミット（closer）: `Refs: plan-<yyyyMMdd_topic-slug>`
+- 軽量レトロスペクティブコミット（ステップ 6.7）: `Refs: retrospective-<session-id>`
+- deep レトロスペクティブコミット（`/iterate-retrospect`）: `Refs: retrospective-deep-<YYYYMMDDHHmm>`
 
 ## 禁止オプション
 

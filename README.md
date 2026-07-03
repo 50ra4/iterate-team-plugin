@@ -75,11 +75,22 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 /iterate-review --session <session-id>        # レビュー / PR Ready 化フェーズ
 ```
 
+## knowledge（クロスセッション自己学習）
+
+各 run の完了直前（ステップ 6.7）に軽量レトロスペクティブ（`team-retrospector`、`mode=light`）が自動実行され、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/`（git-tracked）へ永続化する。記録された教訓は次回以降のセッションで `team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder` の起動プロンプトへダイジェスト（`lessons.md`）として自動注入される。軽量レトロのコミットは同一 PR に含まれるため、レビュー時に教訓の追加内容もあわせて確認できる。複数セッションを横断した重複統合・減衰・プラグイン改善提案の棚卸しは `/iterate-retrospect`（deep レトロスペクティブ）で行う。確定値・スキーマの正本は [`operations/knowledge-policy.md`](./operations/knowledge-policy.md) を参照。
+
 ## 仕組み（パス規約）
 
 - **プラグイン資産**（commands / agents / templates / operations / scripts / assets）はプラグインルート配下に置かれ、本文中では `<plugin_root>/...` で参照する。
 - **`<plugin_root>` の解決**: `${CLAUDE_PLUGIN_ROOT}` は hook / MCP コマンドの実行 env でのみ展開が保証され、agent / command の本文テキストでは展開されない。そのため SessionStart hook が `${CLAUDE_PLUGIN_ROOT}` を `init.json` の `plugin_root` に記録し、Orchestrator が step 0 で読み取って各 subagent プロンプトへ絶対パスを注入する。
-- **ランタイム状態**は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/` に作成される（SessionStart hook が seed）。このうちセッション固有の `.iterate-team/state/` は SessionStart hook が `.git/info/exclude` へ自動登録するため、初回インストールのクリーンな checkout でも `git status` を汚さず `/iterate-team` step 0 の dirty check を誤発火させない（`tasks/` / `changes/` は計画・ADR を含む追跡対象）。チームで共有したい場合は別途 `.gitignore` に `.iterate-team/state/` を追加してもよい（自動登録と重複しても害はない）。
+- **ランタイム状態**は対象リポジトリ直下 `.iterate-team/{state,tasks,changes,knowledge}/` に作成される（SessionStart hook が seed）。このうちセッション固有の `.iterate-team/state/` は SessionStart hook が `.git/info/exclude` へ自動登録するため、初回インストールのクリーンな checkout でも `git status` を汚さず `/iterate-team` step 0 の dirty check を誤発火させない（`tasks/` / `changes/` / `knowledge/` は計画・ADR・教訓を含む追跡対象）。チームで共有したい場合は別途 `.gitignore` に `.iterate-team/state/` を追加してもよい（自動登録と重複しても害はない）。
+
+  | ディレクトリ                | git 管理                                  |
+  | ---------------------------- | ------------------------------------------ |
+  | `.iterate-team/state/`       | ignored（`.git/info/exclude` 自動登録）    |
+  | `.iterate-team/tasks/`       | tracked                                    |
+  | `.iterate-team/changes/`     | tracked                                    |
+  | `.iterate-team/knowledge/`   | tracked                                    |
 
 ## 前提
 

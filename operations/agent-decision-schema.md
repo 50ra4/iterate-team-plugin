@@ -10,7 +10,7 @@
 
 | キー         | 必須 | 値域 / 説明                                                                                                                                                                                                              |
 | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agent`      | 必須 | 対象 Agent 名（`researcher` / `debugger` / `tracer` / `advisor-architect` / `advisor-ui-ux` / `advisor-security` / `advisor-tech-lead` / `evaluator` / `codex-plan-review` / `codex-code-review` / `team-publisher` 等） |
+| `agent`      | 必須 | 対象 Agent 名（`researcher` / `debugger` / `tracer` / `advisor-architect` / `advisor-ui-ux` / `advisor-security` / `advisor-tech-lead` / `evaluator` / `codex-plan-review` / `codex-code-review` / `team-publisher` / `team-retrospector` 等） |
 | `decision`   | 必須 | `invoked` / `skipped` / `adopted` / `rejected` のいずれか（4 種のみ許容）                                                                                                                                                |
 | `reason`     | 必須 | 自然文 1〜2 行。スキップ時は必須記録                                                                                                                                                                                     |
 | `task_id`    | 任意 | タスクループ内発火時のみ（例: `task-1_2_3` / `plan-review` / `planner-loop`）                                                                                                                                            |
@@ -80,9 +80,12 @@
 | ステップ 5.3.2 Codex serial fallback | `codex-code-review`   | `skipped`  | 「並列実行 disabled / 直前 timeout」（残 wave 分） |
 | ステップ 5.4 NG 試行最大到達         | `team-evaluator`      | `rejected` | 「max_retries 到達」                               |
 | ステップ 6.5 push skip               | `team-publisher`      | `skipped`  | 「dev container のため」                           |
+| ステップ 6.7 起動時                  | `team-retrospector`   | `invoked`  | 「軽量レトロスペクティブ（mode=light）」           |
 | ステップ 7 Ready 化 skip             | `team-publisher`      | `skipped`  | 「dev container のため」                           |
 
 > **TDD 関連の追加 runlog イベント**（`agent_decision` とは別の event 種別）: `test_first_red_committed` / `test_first_skipped`（5.1.5）、`refactor_committed` / `refactor_noop` / `refactor_failed`（5.2.5）。`refactor_failed` は fail closed で 5.4 NG 経路に連携する（20260526 ADR 事項7）。いずれも `<plugin_root>/scripts/runlog-append.sh` 経由で追記する。
+
+> **knowledge 関連の追加 runlog イベント**（`agent_decision` とは別の event 種別、ステップ 6.7 / `/iterate-retrospect`）: `retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` の 6 種。`retrospective_failed` はステップ 6.7 の fail-open 時に記録され、`agent_decision` の追加発行は伴わない（ステップ 9 のエスカレーションにも遷移しない、ハーネス唯一の fail-open ステップ）。detail フィールドの構成例（`lesson_id` キーを正とする）は [`knowledge-policy.md` §10](./knowledge-policy.md#10-runlog-イベント) を正本として参照する。いずれのイベントも `<plugin_root>/scripts/runlog-append.sh` 経由で追記する。
 
 ---
 
