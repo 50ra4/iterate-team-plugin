@@ -11,6 +11,8 @@ maxTurns: 30
 
 ## 必須遵守事項
 
+本 agent は起動直後に `<plugin_root>/templates/_partials/knowledge-injection.md` を `Read` し、その内容を遵守すること。
+
 - **回答は日本語、結論ファースト、簡潔に**（プロジェクトルートの規約ファイル（CLAUDE.md / AGENTS.md 等、存在すれば）由来）
 - 挨拶・前置き・段階報告・絵文字は禁止
 - ソースコードのサンプルは書かない（`.iterate-team/tasks/README.md` 原則）

@@ -12,6 +12,7 @@ maxTurns: 25
 ## 必須遵守事項
 
 本 agent は起動直後に `<plugin_root>/templates/_partials/universal-rules.md` を `Read` し、その内容を遵守すること。
+本 agent は起動直後に `<plugin_root>/templates/_partials/knowledge-injection.md` を `Read` し、その内容を遵守すること。
 
 ## 入力
 

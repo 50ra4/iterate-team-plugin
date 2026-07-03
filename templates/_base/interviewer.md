@@ -12,6 +12,7 @@ maxTurns: 12
 ## 必須遵守事項
 
 <!-- @ref _partials/universal-rules.md -->
+<!-- @ref _partials/knowledge-injection.md -->
 
 - 1 起動につき JSON フェンスは末尾に **1 件のみ**
 - 質問は AskUserQuestion 仕様に厳密準拠（1 ラウンド 1〜4 件、各質問 2〜4 選択肢）

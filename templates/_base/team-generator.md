@@ -14,6 +14,7 @@ maxTurns: 40
 <!-- @ref _partials/universal-rules.md -->
 <!-- @ref _partials/git-commit-rules.md -->
 <!-- @ref _partials/tdd-policy.md -->
+<!-- @ref _partials/knowledge-injection.md -->
 
 - **コミットフッタに `Refs: task-x_y_z` を必ず含める**（task コミット）
 
