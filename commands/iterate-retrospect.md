@@ -110,7 +110,7 @@ argument-hint: [--sessions <N>] [--no-push]
 
 team-retrospector の異常終了、またはステップ 4 のコミット失敗時は以下を行う。レトロスペクティブの失敗によってユーザー作業を止めないため、エスカレーションは行わない:
 
-1. `.iterate-team/knowledge/` を `Bash <plugin_root>/scripts/knowledge-recover.sh "<retro-session-id>"` で復旧する。スクリプトは staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を `.iterate-team/state/<retro-session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
+1. `.iterate-team/knowledge/` を `Bash <plugin_root>/scripts/knowledge-recover.sh "<retro-session-id>"` で復旧する。スクリプトは staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を `.iterate-team/state/<retro-session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
 2. 作成した `<retro-branch>` にコミットが 1 件もない（`<original-branch>` と同一 SHA）場合は `Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` の後 `Bash <plugin_root>/scripts/retrospect-delete-branch.sh "<retro-branch>"` でブランチを削除する。コミットが残っている場合は削除せずブランチのみ残し `<original-branch>` へ戻る
 3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>","evacuated_to":"<退避先ディレクトリ。手順1でスクリプトが退避先を出力した場合のみ含める>"}'` を追記する
 4. 失敗理由をユーザーへ報告して終了する

@@ -487,6 +487,114 @@ assert_eq "2回目も stderr は空" "" "$r13b_stderr"
 
 rm -rf "$R13_REPO"
 
+# ========== R14 [第8ラウンド P1 回帰・本命] fresh knowledge 一式（ignored lessons.md 含む） ==========
+# knowledge-append.sh → knowledge-digest.sh を実際に呼んで fresh な knowledge/ 一式
+# （lessons.jsonl / .gitattributes / .gitignore が untracked、.gitignore により
+# lessons.md が ignored）を再現する。修正前のコード（`??` のみを退避対象とする旧実装）
+# では、退避ループが `.gitignore` を先に mv した瞬間に lessons.md が「untracked として
+# 出現」するが、既に読み終えた列挙リストには含まれないため退避されず、事後検証が
+# `?? .iterate-team/knowledge/` を検出して exit 1 する（fail-open が破れる）ことを
+# 手元の再現手順で確認済み。修正後は `--ignored=matching` の `!!` エントリも同時に
+# 退避対象へ含めるため、退避順序に依存せず全件が退避され exit 0 になる。
+run_case "R14: knowledge-append.sh + knowledge-digest.sh で生成した fresh knowledge 一式（ignored lessons.md 含む）→ 全件退避・exit 0・tree clean"
+
+APPEND_SCRIPT="${SCRIPT_DIR}/../knowledge-append.sh"
+DIGEST_SCRIPT="${SCRIPT_DIR}/../knowledge-digest.sh"
+
+R14_REPO="$(make_isolated_repo)"
+git -C "$R14_REPO" commit -q --allow-empty -m "init"
+
+R14_LESSON_JSON='{"category":"review","target_agents":["team-planner"],"trigger":"t","lesson":"l","evidence":[{"session_id":"s1","event":"e"}],"status":"active","source":"auto-retrospective"}'
+
+set +e
+R14_APPEND_OUT=$(CLAUDE_PROJECT_DIR="$R14_REPO" bash "$APPEND_SCRIPT" "$R14_LESSON_JSON" 2>"$TMPDIR_GLOBAL/r14-append-err")
+R14_APPEND_EXIT=$?
+set -e
+assert_eq "前提: knowledge-append.sh が成功する" "0" "$R14_APPEND_EXIT"
+
+set +e
+CLAUDE_PROJECT_DIR="$R14_REPO" bash "$DIGEST_SCRIPT" >/dev/null 2>"$TMPDIR_GLOBAL/r14-digest-err"
+R14_DIGEST_EXIT=$?
+set -e
+assert_eq "前提: knowledge-digest.sh が成功する" "0" "$R14_DIGEST_EXIT"
+
+# append + digest 直後の fresh 一式が、期待どおり ?? / !! 混在であることを確認する
+# （lessons.md のみ ignored。それ以外は untracked）。
+R14_PRE_STATUS="$(git -C "$R14_REPO" status --porcelain -uall --ignored=matching -- .iterate-team/knowledge/)"
+assert_contains "前提: lessons.md は ignored (!!) として現れる" "!! .iterate-team/knowledge/lessons.md" "$R14_PRE_STATUS"
+assert_contains "前提: lessons.jsonl は untracked (??) として現れる" "?? .iterate-team/knowledge/lessons.jsonl" "$R14_PRE_STATUS"
+
+set +e
+stdout=$(CLAUDE_PROJECT_DIR="$R14_REPO" bash "$TARGET" "$SESSION_ID" 2>"$TMPDIR_GLOBAL/r14-err")
+exit_code=$?
+set -e
+r14_stderr="$(cat "$TMPDIR_GLOBAL/r14-err" 2>/dev/null || true)"
+
+assert_eq "exit code 0（第8ラウンド P1 の再現ケースで fail-open が保たれる）" "0" "$exit_code"
+
+R14_PORCELAIN="$(git -C "$R14_REPO" status --porcelain -uall -- .iterate-team/knowledge/ 2>/dev/null)"
+assert_eq "git status --porcelain -uall（knowledge/ 限定）が空" "" "$R14_PORCELAIN"
+
+R14_EVAC="$R14_REPO/.iterate-team/state/$SESSION_ID/failed-retrospective"
+assert_path_exists "lessons.md（ignored）が退避される" "$R14_EVAC/lessons.md"
+assert_path_exists "lessons.jsonl（untracked）が退避される" "$R14_EVAC/lessons.jsonl"
+assert_path_exists ".gitattributes（untracked）が退避される" "$R14_EVAC/.gitattributes"
+assert_path_exists ".gitignore（untracked）が退避される" "$R14_EVAC/.gitignore"
+assert_eq "stdout は退避先の repo-root 相対パス1行" ".iterate-team/state/$SESSION_ID/failed-retrospective/" "$stdout"
+assert_eq "stderr は空" "" "$r14_stderr"
+
+rm -rf "$R14_REPO"
+
+# ========== R15 [第8ラウンド P1 回帰] tracked knowledge + 再生成 ignored lessons.md + staged 変更の混在 ==========
+# .gitignore が既に tracked 済みの通常運用（2回目以降のセッション）で、tracked
+# lessons.jsonl への staged 変更と、再生成された ignored lessons.md が同時に残った
+# ケース。restore（tracked 復元）と ignored 退避の両方が行われ tree clean になることを
+# 確認する。
+run_case "R15: tracked knowledge（.gitignore 済）+ staged 変更 + 再生成 ignored lessons.md の混在 → restore と ignored 退避の両方が行われ tree clean"
+
+R15_REPO="$(make_isolated_repo)"
+mkdir -p "$R15_REPO/.iterate-team/knowledge"
+echo '{"id":"L-orig"}' > "$R15_REPO/.iterate-team/knowledge/lessons.jsonl"
+echo "lessons.jsonl merge=union" > "$R15_REPO/.iterate-team/knowledge/.gitattributes"
+echo "lessons.md" > "$R15_REPO/.iterate-team/knowledge/.gitignore"
+git -C "$R15_REPO" add .iterate-team/knowledge/
+git -C "$R15_REPO" commit -q -m "seed tracked knowledge (incl. .gitignore)"
+
+# tracked lessons.jsonl への staged 変更
+echo '{"id":"L-new"}' >> "$R15_REPO/.iterate-team/knowledge/lessons.jsonl"
+git -C "$R15_REPO" add .iterate-team/knowledge/lessons.jsonl
+
+# 再生成された ignored lessons.md（knowledge-digest.sh を直接呼んで再現）
+set +e
+CLAUDE_PROJECT_DIR="$R15_REPO" bash "$DIGEST_SCRIPT" >/dev/null 2>"$TMPDIR_GLOBAL/r15-digest-err"
+R15_DIGEST_EXIT=$?
+set -e
+assert_eq "前提: knowledge-digest.sh が成功する" "0" "$R15_DIGEST_EXIT"
+
+R15_PRE_STATUS="$(git -C "$R15_REPO" status --porcelain -uall --ignored=matching -- .iterate-team/knowledge/)"
+assert_contains "前提: lessons.md は ignored (!!) として現れる" "!! .iterate-team/knowledge/lessons.md" "$R15_PRE_STATUS"
+assert_contains "前提: lessons.jsonl は staged 変更 (M) として現れる" "M  .iterate-team/knowledge/lessons.jsonl" "$R15_PRE_STATUS"
+
+set +e
+stdout=$(CLAUDE_PROJECT_DIR="$R15_REPO" bash "$TARGET" "$SESSION_ID" 2>"$TMPDIR_GLOBAL/r15-err")
+exit_code=$?
+set -e
+r15_stderr="$(cat "$TMPDIR_GLOBAL/r15-err" 2>/dev/null || true)"
+
+assert_eq "exit code 0" "0" "$exit_code"
+
+R15_CONTENT="$(cat "$R15_REPO/.iterate-team/knowledge/lessons.jsonl")"
+assert_eq "tracked lessons.jsonl は HEAD (L-orig のみ) に復元される" '{"id":"L-orig"}' "$R15_CONTENT"
+
+R15_EVAC="$R15_REPO/.iterate-team/state/$SESSION_ID/failed-retrospective"
+assert_path_exists "再生成された ignored lessons.md が退避される" "$R15_EVAC/lessons.md"
+
+R15_PORCELAIN="$(git -C "$R15_REPO" status --porcelain -uall -- .iterate-team/knowledge/)"
+assert_eq "git status --porcelain -uall（knowledge/ 限定）が空" "" "$R15_PORCELAIN"
+assert_eq "stderr は空" "" "$r15_stderr"
+
+rm -rf "$R15_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

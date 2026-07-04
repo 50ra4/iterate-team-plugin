@@ -166,7 +166,7 @@ proposal レポートの構成は以下のとおり。
 
 レトロスペクティブが失敗した場合は以下のとおり fail-open する。
 
-1. `<plugin_root>/scripts/knowledge-recover.sh "<session-id>"`（`/iterate-retrospect` の場合は `<retro-session-id>`）を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（`git clean` は使わず、生成物は人間の事後調査用に温存する）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
+1. `<plugin_root>/scripts/knowledge-recover.sh "<session-id>"`（`/iterate-retrospect` の場合は `<retro-session-id>`）を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（`git clean` は使わず、生成物は人間の事後調査用に温存する）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
 2. runlog に `retrospective_failed` を記録する（スクリプトが退避先を出力した場合のみ detail に `evacuated_to` を含める。スクリプトが exit 非 0 の場合もその旨を reason に含めて記録の上で続行する）
 3. ステップ 7 へ続行する（PR 完了を阻害しない）
 

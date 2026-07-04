@@ -27,12 +27,40 @@
 #     （knowledge_dir が存在しないディレクトリへ `git status -- <pathspec>` を投げると
 #     `warning: could not open directory` が stderr に出るため、この no-op 経路では
 #     そもそも該当コマンドを呼ばないことで stderr を完全に無音にする）。
-#   手順2（untracked 退避）:
+#   手順2（untracked / ignored 退避）:
 #     `.iterate-team/state/` の git 除外を session-start.sh の ensure_state_ignored と
-#     同じ方式で冪等に保証したうえで、`git status --porcelain -z -uall` の `??` エントリを
-#     1 件ずつ `.iterate-team/state/<session-id>/failed-retrospective/` へ mv する
+#     同じ方式で冪等に保証したうえで、
+#     `git status --porcelain -z -uall --ignored=matching` の `??`（untracked）に加えて
+#     `!!`（ignored）エントリも同様に、1 件ずつ
+#     `.iterate-team/state/<session-id>/failed-retrospective/` へ mv する
 #     （knowledge/ からの相対パス構造を保持。同名衝突は .1, .2... で回避）。
 #     退避後に空になった knowledge/ 配下のディレクトリ（knowledge/ 自体を含む）は削除する。
+#
+#     設計判断（第8ラウンド指摘・実機再現済み）: なぜ ignored (`!!`) も退避対象に含めるか
+#       lessons.md は knowledge-append.sh / knowledge-digest.sh が書き出す
+#       knowledge/.gitignore により git 無視対象にされた生成物である（第7ラウンド対応）。
+#       append + digest 直後（commit 未実施）の fresh な knowledge/ は、.gitignore・
+#       .gitattributes・lessons.jsonl が untracked（`??`）、lessons.md が ignored（`!!`）
+#       という状態になる。ignored を列挙対象に含めず `??` のみを退避すると、ループが
+#       `.gitignore` を（他の untracked エントリと同順で）先に mv した瞬間、以後
+#       lessons.md は「.gitignore による無視」を判定する対象ファイルが既に退避先へ
+#       移動済みのため git から見えなくなり、突如 untracked として「出現」する。
+#       このタイミング（列挙リストを読み終えた後）で出現した lessons.md は今回のループが
+#       既に捕捉したエントリ一覧に含まれないため退避されずに残り、手順3の事後検証が
+#       `?? .iterate-team/knowledge/` を検出して exit 1 する（fail-open が破れ、作業ツリーが
+#       dirty のまま残る）。ignored を untracked と同様に退避対象へ含めることで、
+#       `.gitignore` と lessons.md の退避順序に依存せず knowledge/ 配下の生成物を丸ごと
+#       退避できる。加えて、.gitignore が既に tracked 済みの通常運用（2回目以降の
+#       セッション）でも、再生成された ignored な lessons.md を確実に退避できるため、
+#       「古い digest（前回失敗時点の内容）が次回のレトロスペクティブ注入に混入して
+#       残る」というハザードも同時に消える（これは手順2が本来 fail-open の事後調査用に
+#       生成物を温存するという意図とも整合する）。
+#       `--ignored=matching` は pathspec に一致する個々の ignored ファイルを列挙する
+#       （ignored なディレクトリ全体を 1 エントリに畳み込む既定動作 `--ignored`/
+#       `--ignored=traditional` と異なり、knowledge/ 配下の個別ファイルパスを相対パス
+#       構造ごと取得する本スクリプトの mv ループに必要）。git 2.16 (2018) で導入済みの
+#       オプションであり、本プラグインの前提実行環境（dev container・git 2.43 系）では
+#       常に利用可能。
 #   手順3（事後検証）:
 #     `git status --porcelain -- .iterate-team/knowledge/` が空であることを確認し、
 #     空でなければ診断を stderr に出して exit 1 する。この git status 自体が非ゼロ
@@ -250,8 +278,10 @@ moved_any=false
 if [[ -d "$knowledge_dir" ]] || [[ -n "$tracked_list_after" ]]; then
   while IFS= read -r -d '' entry; do
     status="${entry:0:2}"
-    # untracked (`??`) 以外（ignored 等）は対象外
-    [[ "$status" == "??" ]] || continue
+    # untracked (`??`) / ignored (`!!`) 以外は対象外。ignored も対象に含める理由は
+    # ヘッダコメント「手順2」の設計判断（第8ラウンド指摘）を参照
+    # （.gitignore により無視される lessons.md 等の生成物を退避順序に依存せず捕捉するため）。
+    [[ "$status" == "??" || "$status" == "!!" ]] || continue
 
     path="${entry:3}"
     rel="${path#"$knowledge_pathspec"}"
@@ -272,7 +302,7 @@ if [[ -d "$knowledge_dir" ]] || [[ -n "$tracked_list_after" ]]; then
 
     mv -- "$src" "$final_dest"
     moved_any=true
-  done < <(git -C "$repo_root" status --porcelain -z -uall -- "$knowledge_pathspec")
+  done < <(git -C "$repo_root" status --porcelain -z -uall --ignored=matching -- "$knowledge_pathspec")
 
   # 退避後に空になった knowledge/ 配下のディレクトリ（knowledge/ 自体を含む）を削除する。
   # untracked の空ディレクトリは git status に現れないため tree の clean 判定には影響しないが、

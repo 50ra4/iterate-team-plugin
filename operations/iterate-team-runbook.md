@@ -835,7 +835,7 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 `team-retrospector` の起動失敗 / 戻り値 JSON parse 失敗・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合:
 
-1. `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力する。clean 化に成功すれば exit 0、失敗時は stderr に診断を出して exit 1 を返す
+1. `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力する。clean 化に成功すれば exit 0、失敗時は stderr に診断を出して exit 1 を返す
 2. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>","evacuated_to":"<手順1のスクリプト stdout。出力があった場合のみ含める>"}` を追記する。手順1のスクリプトが exit 非 0 で終了した場合も、その旨を `reason` に含めて記録の上で続行する（fail-open は維持する）
 3. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
 
