@@ -81,9 +81,14 @@
       "Write(.iterate-team/state/*/**)",
       "Edit(.iterate-team/state/*/**)",
       // 6.7 fail-open の退避用（レトロスペクティブ失敗時に untracked な knowledge 生成物を
-      // .iterate-team/state/<session-id>/failed-retrospective/ へ退避する）
+      // .iterate-team/state/<session-id>/failed-retrospective/ へ退避する）。
+      // 退避は git status --porcelain の ?? 出力に列挙されたパスを1件ずつ mv すること
+      // （シェルグロブ mv .iterate-team/knowledge/* はドットファイルを取りこぼすため使わない）。
       "Bash(mkdir -p .iterate-team/state/*)",
       "Bash(mv .iterate-team/knowledge/* .iterate-team/state/*)",
+      // ドットファイル（.gitattributes 等）の退避用の変種。上記グロブは "." で始まる
+      // ファイルにマッチしないため、明示的に別パターンでカバーする。
+      "Bash(mv .iterate-team/knowledge/.* .iterate-team/state/*)",
 
       // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
       "Write(.iterate-team/knowledge/**)",

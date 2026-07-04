@@ -163,7 +163,7 @@ proposal レポートの構成は以下のとおり。
 レトロスペクティブが失敗した場合は以下のとおり fail-open する。
 
 1. `git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）
-2. 残る untracked ファイル（`git status --porcelain -- .iterate-team/knowledge/` の `??`）を、`mkdir -p` した `.iterate-team/state/<session-id>/failed-retrospective/`（`/iterate-retrospect` の場合は `<retro-session-id>`）へ `mv` で退避する。`git clean` は使わない（state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
+2. 残る untracked ファイル（`git status --porcelain -- .iterate-team/knowledge/` の `??`。`.gitattributes` 等のドットファイルを含む）を、`mkdir -p` した `.iterate-team/state/<session-id>/failed-retrospective/`（`/iterate-retrospect` の場合は `<retro-session-id>`）へ `mv` で退避する。`??` に列挙されたパスを1件ずつ `mv` すること。シェルグロブ `mv .iterate-team/knowledge/* ...` は使わない（ドットファイルを取りこぼし `??` が残存するため）。`git clean` は使わない（state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
 3. runlog に `retrospective_failed` を記録する（退避を行った場合は detail に `evacuated_to` を含める）
 4. ステップ 7 へ続行する（PR 完了を阻害しない）
 

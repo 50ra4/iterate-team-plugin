@@ -551,6 +551,38 @@ assert_contains "stderr に merged_into 違反の理由が出力される" "merg
 
 rm -rf "$T22_REPO"
 
+# ========== T23: fresh リポジトリで不正 payload は副作用ゼロで拒否される ==========
+# PR レビュー指摘（Codex P1）: seed（mkdir -p / .gitattributes 追記）が検証より前に走ると、
+# fresh リポジトリで不正レコードが拒否されても untracked な .gitattributes 等が残り、
+# fail-open 後も作業ツリーが dirty のままになって次回 preflight の clean-tree ガードを
+# 汚染する。seed は全 check 成功後に移動したため、拒否時は knowledge/ 配下に一切
+# ファイルが生成されず、git status --porcelain も空であることを確認する。
+run_case "T23: fresh リポジトリで不正 payload（不正 category）を append すると knowledge/ 配下に一切ファイルが生成されず git status も空のまま"
+
+T23_REPO="$(make_isolated_repo)"
+BAD_CATEGORY_FRESH='{"category":"bogus","target_agents":["team-planner"],"trigger":"t","lesson":"l","evidence":[{"session_id":"s","event":"e"}],"status":"active","source":"manual"}'
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T23_REPO" bash "$TARGET" "$BAD_CATEGORY_FRESH" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+
+T23_KNOWLEDGE_DIR="$T23_REPO/.iterate-team/knowledge"
+if [[ -e "$T23_KNOWLEDGE_DIR" ]]; then
+  echo "  FAIL: knowledge/ が生成されてしまっている（seed が検証前に走っている疑い）: $T23_KNOWLEDGE_DIR" >&2
+  fail_count=$((fail_count + 1))
+else
+  echo "  PASS: knowledge/ が一切生成されない（.gitattributes 含め副作用ゼロ）"
+  pass_count=$((pass_count + 1))
+fi
+
+T23_PORCELAIN="$(cd "$T23_REPO" && git status --porcelain)"
+assert_eq "git status --porcelain が空（作業ツリーに dirty な差分が残らない）" "" "$T23_PORCELAIN"
+
+rm -rf "$T23_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

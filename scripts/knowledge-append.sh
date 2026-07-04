@@ -10,9 +10,6 @@
 #   <plugin_root>/scripts/knowledge-append.sh '{"category":"review","target_agents":["team-planner"],"trigger":"...","lesson":"...","evidence":[{"session_id":"s1","event":"..."}],"status":"active","source":"auto-retrospective"}'
 #
 # 動作:
-#   - $REPO_ROOT/.iterate-team/knowledge/ を冪等 seed する
-#       - knowledge/ , knowledge/proposals/ を mkdir -p
-#       - knowledge/.gitattributes に "lessons.jsonl merge=union" 行を（無ければ）追記
 #   - 必須キー / enum を jq で検証し、不正なら非 0 終了 + stderr に理由を出力する
 #       - lesson は 200 字以内（knowledge-policy.md §3）
 #       - target_agents の各要素は "*" / team-planner / team-generator / team-evaluator /
@@ -21,6 +18,11 @@
 #       - evidence の各要素は session_id / event を持つオブジェクト
 #       - lesson / trigger に "<!-- manual:" を含めることは禁止（digest の manual ブロック
 #         抽出を壊すため）
+#   - 全検証成功後、$REPO_ROOT/.iterate-team/knowledge/ を冪等 seed する（検証前に seed
+#     すると、拒否レコードが untracked な .gitattributes 等を残し fail-open 後も作業ツリーが
+#     dirty のままになるため、seed は検証の後段に置く）
+#       - knowledge/ , knowledge/proposals/ を mkdir -p
+#       - knowledge/.gitattributes に "lessons.jsonl merge=union" 行を（無ければ）追記
 #   - id / ts / confidence / applied_count / merged_into / last_applied_ts を補完する
 #   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl へ 1 行 JSON（compact）で
 #     flock append する（runlog-append.sh のロック節を踏襲。macOS は mkdir ロック fallback）
@@ -52,20 +54,6 @@ repo_root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || 
 knowledge_dir="${repo_root}/.iterate-team/knowledge"
 lessons_file="${knowledge_dir}/lessons.jsonl"
 gitattributes_file="${knowledge_dir}/.gitattributes"
-
-# ---- 冪等 seed（knowledge/・proposals/・.gitattributes） ----
-# knowledge/ は git-tracked 資産（state/ と異なり exclude しない。knowledge-policy.md §2）。
-mkdir -p "$knowledge_dir" "${knowledge_dir}/proposals"
-
-GITATTR_LINE="lessons.jsonl merge=union"
-if [[ ! -f "$gitattributes_file" ]] || ! grep -qxF "$GITATTR_LINE" "$gitattributes_file" 2>/dev/null; then
-  # 既存ファイルが改行で終わっていない場合、追記行が直前の行と連結されてしまわないよう
-  # 先に改行を足す（session-start.sh の ensure_state_ignored と同じ末尾改行ガード）。
-  if [[ -s "$gitattributes_file" ]] && [[ -n "$(tail -c1 "$gitattributes_file" 2>/dev/null)" ]]; then
-    printf '\n' >> "$gitattributes_file"
-  fi
-  echo "$GITATTR_LINE" >> "$gitattributes_file"
-fi
 
 # ---- 検証ヘルパー ----
 # 与えた jq 式が真を返さない場合、理由を stderr に出して非 0 終了する。
@@ -154,6 +142,23 @@ check '(has("id") | not) or (.id | test("^L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}$"))' \
 # （status=merged 時の統合先 id。knowledge-policy.md §3）。
 check '((has("merged_into") | not) or (.merged_into == null) or (.merged_into | test("^L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}$")))' \
   'merged_into, when non-null, must match the same id format ^L-<YYYYMMDDTHHmm>-<4hex>$'
+
+# ---- 冪等 seed（knowledge/・proposals/・.gitattributes） ----
+# seed は全 check 検証成功後に行う。検証拒否されたレコードが untracked の .gitattributes
+# 等を残すと、fresh リポジトリで fail-open 後も作業ツリーが dirty のままになり後続
+# preflight（clean-tree ガード）を汚染するため（不正入力は副作用ゼロで拒否する）。
+# knowledge/ は git-tracked 資産（state/ と異なり exclude しない。knowledge-policy.md §2）。
+mkdir -p "$knowledge_dir" "${knowledge_dir}/proposals"
+
+GITATTR_LINE="lessons.jsonl merge=union"
+if [[ ! -f "$gitattributes_file" ]] || ! grep -qxF "$GITATTR_LINE" "$gitattributes_file" 2>/dev/null; then
+  # 既存ファイルが改行で終わっていない場合、追記行が直前の行と連結されてしまわないよう
+  # 先に改行を足す（session-start.sh の ensure_state_ignored と同じ末尾改行ガード）。
+  if [[ -s "$gitattributes_file" ]] && [[ -n "$(tail -c1 "$gitattributes_file" 2>/dev/null)" ]]; then
+    printf '\n' >> "$gitattributes_file"
+  fi
+  echo "$GITATTR_LINE" >> "$gitattributes_file"
+fi
 
 # ---- フィールド補完 ----
 # id 未指定なら L-<YYYYMMDDTHHmm(UTC)>-<4hex乱数> を生成する（並走セッション衝突回避のため
