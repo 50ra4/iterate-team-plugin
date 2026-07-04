@@ -107,6 +107,11 @@ fi
 # ---- セクション整形ヘルパー ----
 # 引数: フィルタ済み JSON 配列（jq）。1 件 1 行 "- [id] lesson" を出力する。
 # 空配列なら "(なし)" の 1 行を出力する。
+#
+# .id / .lesson はともに gsub("[\r\n]+"; " ") で改行を空白へ潰してから連結する。
+# knowledge-append.sh の入口検証（lesson/trigger の改行禁止・id の形式強制）を経由しない
+# 手編集や過去データ由来の不正行が lessons.jsonl に混入していても、ここで改行を潰すことで
+# セクション見出し（"## team-generator" 等）の偽造を防ぐ（append 側検証との多層防御）。
 format_section() {
   local json="$1"
   local count
@@ -114,7 +119,7 @@ format_section() {
   if [[ "$count" -eq 0 ]]; then
     echo "(なし)"
   else
-    printf '%s' "$json" | jq -r '.[] | "- [" + .id + "] " + .lesson'
+    printf '%s' "$json" | jq -r '.[] | "- [" + (.id | gsub("[\r\n]+"; " ")) + "] " + (.lesson | gsub("[\r\n]+"; " "))'
   fi
 }
 

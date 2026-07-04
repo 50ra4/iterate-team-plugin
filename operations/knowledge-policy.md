@@ -54,6 +54,10 @@
 | `applied_count`   | number         | `lesson_applied` 集計値                                                                                        |
 | `last_applied_ts` | string \| null | ISO8601 \| null                                                                                                 |
 
+`lesson` と `trigger` は**改行を含まない 1 行**とする。`knowledge-digest.sh` の `format_section` は `lesson` を 1 行 raw 出力するため、改行を許すと別 agent セクション見出し（例: `## team-generator`）を偽造できてしまう。`knowledge-append.sh` がこの制約を検証し、改行を含むレコードを拒否する。
+
+`id` の形式（`L-<YYYYMMDDTHHmm>-<4hex>`）は `knowledge-append.sh` が正規表現で強制する。呼び出し元が `id`（更新レコードの上書き対象、または `merged_into`）を明示指定する場合も同じ形式が必須であり、不一致は拒否する。
+
 更新（hit-count 加算・deprecate・merge）は**同一 `id` の上書きレコードを append することで表現する**（rewrite しない）。これにより flock append のみで並走安全性を確保する。物理圧縮は `knowledge-prune.sh --compact` のみが行う。
 
 上書きレコードは部分フィールドではなく、**既存レコード（同一 `id` の最終レコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える**。`knowledge-append.sh` は上書きレコードにも新規と同一の必須キー検証を適用する。

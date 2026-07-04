@@ -44,6 +44,7 @@
 
       // (2) ハーネス補助スクリプト（<PLUGIN_ROOT> を実体パスへ置換すること）
       "Bash(<PLUGIN_ROOT>/scripts/runlog-append.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/runlog-agent-decision.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/iterate-validate-session.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/validate-plan.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-compute-waves.sh *)",

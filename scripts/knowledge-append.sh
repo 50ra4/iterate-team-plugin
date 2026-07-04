@@ -122,6 +122,14 @@ check '(.evidence | all(. as $e | ($e | type) == "object" and ($e | has("session
 check '((.lesson | test("<!-- manual:") | not) and (.trigger | test("<!-- manual:") | not))' \
   'lesson/trigger must not contain the literal string "<!-- manual:" (would break digest manual-block extraction)'
 
+# lesson / trigger に改行(\n / \r)を含めることを禁止する。knowledge-digest.sh の
+# format_section は `jq -r '"- [" + .id + "] " + .lesson'` で 1 行 raw 出力するため、
+# lesson/trigger に改行を含むレコードが受理されると、改行以降の文字列が独立した行として
+# 描画されてしまい "## team-generator" 等の別 agent セクション見出しを偽造できる
+# （PR レビュー指摘: セクション偽造による対象外 agent への永続注入）。
+check '((.lesson | test("[\\r\\n]") | not) and (.trigger | test("[\\r\\n]") | not))' \
+  'lesson/trigger must not contain newline characters (\n or \r): digest renders them raw on a single line, so a newline is a section-forgery vector'
+
 check 'has("status")' "status is required"
 check '.status as $s | ["active","deprecated","merged"] | index($s) != null' \
   "status must be one of active/deprecated/merged"
@@ -133,6 +141,19 @@ check '.source as $s | ["auto-retrospective","deep-retrospect","manual"] | index
 # confidence は任意。指定時のみ enum 検証（未指定時は "low" を補完する）。
 check '(has("confidence") | not) or (.confidence as $c | ["low","medium","high"] | index($c) != null)' \
   "confidence must be one of low/medium/high when specified"
+
+# id を呼び出し元が指定した場合、knowledge-policy.md §3 の id 形式
+# L-<YYYYMMDDTHHmm>-<4hex> を強制する（不一致は拒否）。id も digest の
+# "- [" + .id + "] " 描画にそのまま使われるため、不正な id（改行や "]" 等を含む文字列）は
+# lesson/trigger と同じセクション偽造・行フォーマット破壊のベクトルになる
+# （PR レビュー指摘: 入口側での多層防御）。
+check '(has("id") | not) or (.id | test("^L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}$"))' \
+  'id, when specified by the caller, must match ^L-<YYYYMMDDTHHmm>-<4hex>$ (knowledge-policy.md §3)'
+
+# merged_into が非 null で指定された場合も、id と同一形式を強制する
+# （status=merged 時の統合先 id。knowledge-policy.md §3）。
+check '((has("merged_into") | not) or (.merged_into == null) or (.merged_into | test("^L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}$")))' \
+  'merged_into, when non-null, must match the same id format ^L-<YYYYMMDDTHHmm>-<4hex>$'
 
 # ---- フィールド補完 ----
 # id 未指定なら L-<YYYYMMDDTHHmm(UTC)>-<4hex乱数> を生成する（並走セッション衝突回避のため
