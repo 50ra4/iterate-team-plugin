@@ -212,6 +212,31 @@ if ! jq -n \
 fi
 mv "$INIT_FILE.tmp" "$INIT_FILE"
 
+# lessons.md（knowledge-digest.sh が決定的に再生成する派生物）は git 管理外の生成物
+# である（並走セッションの digest add/add 競合を防ぐための設計判断。knowledge-append.sh
+# ヘッダ参照）。そのため fresh clone 直後やブランチマージ直後には lessons.md が
+# 不在・stale になり得る。正本の lessons.jsonl が存在する場合のみ、Orchestrator への
+# 注入（knowledge_digest_path 経由）より前に決定的に再生成しておく。
+# hook を壊さないことを最優先するため、digest の失敗は stderr への warning のみとし、
+# hook 自体は既存の fail-safe 方針（致命エラー以外は続行）を踏襲して正常続行する。
+# lessons.jsonl が不在の場合は何もしない（空の lessons.md を新規生成しない。無ければ
+# 「未生成」のままにしておくのが正しい状態であり、空骨格を作ると実体の無い digest を
+# 誤って権威付けてしまうため）。
+KNOWLEDGE_JSONL="$RUNTIME_ROOT/knowledge/lessons.jsonl"
+if [ -f "$KNOWLEDGE_JSONL" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  DIGEST_SCRIPT="${SCRIPT_DIR}/knowledge-digest.sh"
+  if [ -f "$DIGEST_SCRIPT" ]; then
+    DIGEST_ERR="$(CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$DIGEST_SCRIPT" 2>&1 1>/dev/null)"
+    DIGEST_STATUS=$?
+    if [ "$DIGEST_STATUS" -ne 0 ]; then
+      echo "[session-start-hook] warning: knowledge-digest.sh の再生成に失敗しました (exit=$DIGEST_STATUS)。lessons.md は不在/stale なまま処理を継続します。詳細: $DIGEST_ERR" >&2
+    fi
+  else
+    echo "[session-start-hook] warning: knowledge-digest.sh が見つかりません ($DIGEST_SCRIPT)。lessons.md の再生成をスキップします。" >&2
+  fi
+fi
+
 # additionalContext へ session-init タグと warning を出力
 CTX="<session-init init_path=\"$INIT_FILE\" claude_session_id=\"$SESSION_ID\" is_dev_container=\"$IS_DEV_CONTAINER\" mcp_profile=\"$MCP_PROFILE\" model=\"$MODEL\" plugin_root=\"$PLUGIN_ROOT\" />
 [session-start-hook] ハーネス初期化完了。/iterate-team の step 0 は本 session-init を参照して再判定を省略する。plugin_root は init.json の plugin_root を参照。スキーマは <plugin_root>/operations/session-start-hook.md を参照。"

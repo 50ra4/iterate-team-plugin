@@ -4,6 +4,14 @@
 # Usage:
 #   <plugin_root>/scripts/knowledge-digest.sh
 #
+# lessons.md は git 管理外の生成物である（Codex レビュー第7ラウンド P1 指摘・実機再現済み）。
+# 正本は lessons.jsonl（.gitattributes の merge=union で並走セッション間も無競合に統合できる）
+# であり、lessons.md はそこから決定的に再生成できる派生ビューに過ぎない。派生物を git 追跡
+# すると、並走する複数セッションがそれぞれ独立に生成した lessons.md がマージ時に add/add
+# 競合を起こし統合を塞ぐため（merge=union は lessons.jsonl のみに効く設定で lessons.md の
+# 競合は解決しない）、lessons.md 自体を追跡対象から外す。詳細: knowledge-append.sh ヘッダの
+# 「設計判断: lessons.md を git 管理外にする」参照。
+#
 # 動作:
 #   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl を読み、lessons.md を
 #     決定的に再生成する（掲載規則は knowledge-policy.md §4 の確定値）。
@@ -21,6 +29,10 @@
 #   - 既存 lessons.md があれば <!-- manual:start -->〜<!-- manual:end --> ブロックを
 #     抽出して末尾に温存する（無ければ空の manual ブロックを生成する）
 #   - lessons.jsonl が無い/空でも空セクションの骨格を生成する
+#   - lessons.md を書き出す前に knowledge/.gitignore に "lessons.md" 行を（無ければ）
+#     冪等 seed する（append を経ずに本スクリプト単独で実行された場合でも、生成物の
+#     lessons.md が untracked 差分として作業ツリーを汚さないようにするため。
+#     knowledge-append.sh と同一の存在チェック + 末尾改行ガード + 追記の様式）
 #   - tmp ファイルに書いて mv で原子的に置換する
 #
 # 仕様の正本: <plugin_root>/operations/knowledge-policy.md（§4）
@@ -37,8 +49,22 @@ repo_root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || 
 knowledge_dir="${repo_root}/.iterate-team/knowledge"
 lessons_jsonl="${knowledge_dir}/lessons.jsonl"
 lessons_md="${knowledge_dir}/lessons.md"
+gitignore_file="${knowledge_dir}/.gitignore"
 
 mkdir -p "$knowledge_dir"
+
+# lessons.md（本スクリプトが書き出す生成物）を git 管理外にする冪等 seed。
+# knowledge-append.sh も同じ行を同じ様式で seed するが、append を経ずに本スクリプトだけを
+# 直接実行するケース（例: session-start.sh からの再生成呼び出し）でも untracked な
+# lessons.md が作業ツリーを汚さないよう、書き出し前にここでも独立して保証する。
+GITIGNORE_LINE="lessons.md"
+if [[ ! -f "$gitignore_file" ]] || ! grep -qxF "$GITIGNORE_LINE" "$gitignore_file" 2>/dev/null; then
+  # knowledge-append.sh と同一の末尾改行ガード。
+  if [[ -s "$gitignore_file" ]] && [[ -n "$(tail -c1 "$gitignore_file" 2>/dev/null)" ]]; then
+    printf '\n' >> "$gitignore_file"
+  fi
+  echo "$GITIGNORE_LINE" >> "$gitignore_file"
+fi
 
 # agent 別セクションの表示順（knowledge-policy.md §4 の確定順）
 # 相互参照: この5 agent 名の許容集合は knowledge-append.sh の target_agents enum 検証

@@ -577,6 +577,131 @@ assert_not_contains "古い ts 側のレッスン本文（物理最終行）は�
 
 rm -rf "$T15_REPO"
 
+# ========== T16: digest 単独実行でも .gitignore に lessons.md 行が冪等 seed される ==========
+# knowledge-append.sh を経由せず knowledge-digest.sh だけを直接実行するケース（例:
+# session-start.sh からの再生成呼び出し）でも、生成物 lessons.md が untracked 差分として
+# tree を汚さないよう、書き出し前に .gitignore を独立して保証することを検証する。
+run_case "T16: knowledge-append.sh を経由せず digest だけを実行しても .gitignore に lessons.md 行が冪等 seed される"
+
+T16_REPO="$(make_isolated_repo)"
+
+set +e
+CLAUDE_PROJECT_DIR="$T16_REPO" bash "$TARGET" >/dev/null 2>&1
+exit_code=$?
+CLAUDE_PROJECT_DIR="$T16_REPO" bash "$TARGET" >/dev/null 2>&1
+exit_code2=$?
+set -e
+
+T16_GITIGNORE="$T16_REPO/.iterate-team/knowledge/.gitignore"
+assert_eq "1回目 exit code 0" "0" "$exit_code"
+assert_eq "2回目 exit code 0" "0" "$exit_code2"
+if [[ -f "$T16_GITIGNORE" ]]; then
+  echo "  PASS: digest 単独実行だけでも .gitignore が生成される"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: digest 単独実行では .gitignore が生成されない" >&2
+  fail_count=$((fail_count + 1))
+fi
+assert_contains ".gitignore に lessons.md 行が含まれる" "lessons.md" "$(cat "$T16_GITIGNORE" 2>/dev/null)"
+T16_LINE_COUNT="$(grep -cxF "lessons.md" "$T16_GITIGNORE" 2>/dev/null || echo 0)"
+assert_eq "lessons.md 行は 2 回実行後も 1 行のみ（冪等）" "1" "$T16_LINE_COUNT"
+
+rm -rf "$T16_REPO"
+
+# ========== T17 [本命] 2ブランチ並走マージ E2E ==========
+# Codex レビュー第7ラウンド P1（実機再現済み）: 同一 base から並走した2セッションが
+# それぞれ append + digest + commit した後にマージすると、lessons.jsonl は
+# .gitattributes の merge=union で無競合に統合できるが、決定的に再生成される派生物
+# lessons.md は各ブランチが独立に新規生成するため add/add 競合を起こし、統合を塞いでいた。
+# 本テストは、修正後（lessons.md を git 管理外にする）の状態で、base から分岐した
+# branch-a / branch-b がそれぞれ append + digest + 個別 git add（lessons.jsonl /
+# .gitattributes / .gitignore のみ。lessons.md は意図的に add しない）+ commit した後、
+# base へ branch-a → branch-b の順にマージしても競合が一切発生せず、両ブランチのレッスンが
+# lessons.jsonl に残存し、digest を再実行すれば両方が lessons.md に反映されることを検証する
+# （修正前は lessons.md の add/add 競合で本テストが fail する構成）。
+run_case "T17: 同一 base から分岐した2ブランチがそれぞれ append+digest+commit した後にマージしても競合ゼロ・両レッスンが残存する"
+
+APPEND_TARGET="${SCRIPT_DIR}/../knowledge-append.sh"
+
+make_git_repo_with_commit() {
+  local repo
+  repo="$(mktemp -d "$TMPDIR_GLOBAL/repo.XXXXXX")"
+  git init -q --initial-branch=base "$repo"
+  git -C "$repo" config user.email "test@example.com"
+  git -C "$repo" config user.name "test"
+  printf 'seed\n' > "$repo/seed.txt"
+  git -C "$repo" add seed.txt
+  git -C "$repo" commit -q -m "init"
+  echo "$repo"
+}
+
+append_digest_add_commit() {
+  local repo="$1" branch="$2" lesson_text="$3" target_agent="$4"
+  local record
+  record="$(jq -nc --arg lesson "$lesson_text" --arg agent "$target_agent" '{
+    category: "impl", target_agents: [$agent], trigger: "concurrent session trigger",
+    lesson: $lesson, evidence: [{session_id:("s-" + $agent), event:"e"}],
+    status: "active", source: "auto-retrospective"
+  }')"
+  git -C "$repo" checkout -q -b "$branch" base
+  CLAUDE_PROJECT_DIR="$repo" bash "$APPEND_TARGET" "$record" >/dev/null 2>&1
+  CLAUDE_PROJECT_DIR="$repo" bash "$TARGET" >/dev/null 2>&1
+  git -C "$repo" add \
+    .iterate-team/knowledge/lessons.jsonl \
+    .iterate-team/knowledge/.gitattributes \
+    .iterate-team/knowledge/.gitignore
+  git -C "$repo" commit -q -m "${branch}: append lesson"
+}
+
+T17_REPO="$(make_git_repo_with_commit)"
+
+append_digest_add_commit "$T17_REPO" "branch-a" "branch A lesson: レビュー観点Aを先に確認する" "team-planner"
+append_digest_add_commit "$T17_REPO" "branch-b" "branch B lesson: 実装観点Bを先に確認する" "team-generator"
+
+git -C "$T17_REPO" checkout -q base
+
+set +e
+merge_a_err="$(git -C "$T17_REPO" merge -q --no-edit branch-a 2>&1)"
+merge_a_exit=$?
+set -e
+assert_eq "branch-a のマージは競合なく exit 0" "0" "$merge_a_exit"
+
+set +e
+merge_b_err="$(git -C "$T17_REPO" merge -q --no-edit branch-b 2>&1)"
+merge_b_exit=$?
+set -e
+assert_eq "branch-b のマージも競合なく exit 0（本命: 修正前はここで lessons.md の add/add 競合が発生していた）" "0" "$merge_b_exit"
+
+# state/ 配下のロックファイル残置（append 実行時の .iterate-team/state/knowledge-lessons.lock）
+# は本テストの検証対象外（session-start.sh の ensure_state_ignored で実運用では無視登録
+# される）ため、knowledge/ 配下のみに絞って dirty/競合の残存を確認する。
+T17_STATUS="$(git -C "$T17_REPO" status --porcelain -- .iterate-team/knowledge/)"
+assert_eq "マージ後の git status --porcelain -- knowledge/ は空（未解決の競合が残らない）" "" "$T17_STATUS"
+
+T17_UNMERGED="$(git -C "$T17_REPO" diff --name-only --diff-filter=U)"
+assert_eq "未解決（unmerged）ファイルが存在しない" "" "$T17_UNMERGED"
+
+T17_JSONL="$T17_REPO/.iterate-team/knowledge/lessons.jsonl"
+T17_JSONL_CONTENT="$(cat "$T17_JSONL" 2>/dev/null || true)"
+assert_contains "マージ後の lessons.jsonl に branch-a のレッスンが残存する" "branch A lesson" "$T17_JSONL_CONTENT"
+assert_contains "マージ後の lessons.jsonl に branch-b のレッスンが残存する" "branch B lesson" "$T17_JSONL_CONTENT"
+
+T17_JSONL_LINES="$(wc -l < "$T17_JSONL" | tr -d ' ')"
+assert_eq "lessons.jsonl は両ブランチ分の2行になっている" "2" "$T17_JSONL_LINES"
+
+# digest を再実行すれば両レッスンが lessons.md に反映される
+set +e
+CLAUDE_PROJECT_DIR="$T17_REPO" bash "$TARGET" >/dev/null 2>&1
+T17_DIGEST_EXIT=$?
+set -e
+assert_eq "マージ後の digest 再実行は exit 0" "0" "$T17_DIGEST_EXIT"
+
+T17_MD_CONTENT="$(cat "$T17_REPO/.iterate-team/knowledge/lessons.md" 2>/dev/null || true)"
+assert_contains "再生成後の lessons.md に branch-a のレッスンが反映される" "branch A lesson" "$T17_MD_CONTENT"
+assert_contains "再生成後の lessons.md に branch-b のレッスンが反映される" "branch B lesson" "$T17_MD_CONTENT"
+
+rm -rf "$T17_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

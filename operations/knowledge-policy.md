@@ -20,7 +20,8 @@
 ```
 .iterate-team/knowledge/     # git-tracked（state/ と異なり commit 対象。tasks/・changes/ と同格）
   lessons.jsonl               # 構造化レコードの正本（append-only、同一 id は ts が最新のレコードが正。merge=union はブランチ統合時に行順を保証しないため物理行順に依存しない）
-  lessons.md                  # 注入用ダイジェスト（knowledge-digest.sh が決定的に再生成）
+  lessons.md                  # 注入用ダイジェスト（**git 管理外**。`knowledge/.gitignore` で除外し、`knowledge-digest.sh` が `lessons.jsonl` から決定的に再生成する）
+  .gitignore                   # "lessons.md"（knowledge-append.sh / knowledge-digest.sh が冪等 seed。本ファイル自体は tracked）
   proposals/                  # プラグイン改善提案レポート（人間向け、自動編集しない）
     YYYYMMDD_<slug>.md
     INDEX.md                  # deep レトロが更新する提案一覧
@@ -29,7 +30,7 @@
 
 ### tracked / untracked の対比
 
-`.iterate-team/state/` は `session-start.sh` の exclude パターン（`/${prefix}.iterate-team/state/`）により git 除外されるのに対し、`.iterate-team/knowledge/` は git-tracked である。両者は同じ `.iterate-team/` 配下にありながら管理方針が正反対であることに注意する。`knowledge/` は `tasks/`・`changes/` と同格の commit 対象資産として扱う。
+`.iterate-team/state/` は `session-start.sh` の exclude パターン（`/${prefix}.iterate-team/state/`）により git 除外されるのに対し、`.iterate-team/knowledge/` は git-tracked である。両者は同じ `.iterate-team/` 配下にありながら管理方針が正反対であることに注意する。`knowledge/` は `tasks/`・`changes/` と同格の commit 対象資産として扱う。**ただし `knowledge/` 配下唯一の例外として `lessons.md` は git 管理外**とする（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` は tracked）。並走する複数セッションが各自再生成した `lessons.md` をそれぞれコミットすると、`merge=union`（`.gitattributes` により `lessons.jsonl` のみに効く）では防げない add/add 競合がブランチ統合時に発生するため、この生成物は追跡しない。再生成のタイミングは (a) SessionStart hook（`lessons.jsonl` が存在する場合のみ実行し、失敗しても hook は続行する）と (b) light/deep レトロが `lessons.jsonl` へ append した直後の 2 箇所である。
 
 ### state-prune.sh との関係
 
@@ -64,7 +65,7 @@
 
 ## 4. ダイジェスト `lessons.md` の掲載規則
 
-`knowledge-digest.sh` にハードコードされる確定値であり、以下の規則で決定的に再生成する。
+`knowledge-digest.sh` にハードコードされる確定値であり、以下の規則で決定的に再生成する。`lessons.md` は git 管理外の生成物であるため（§2 参照）、再生成は (a) SessionStart hook（`lessons.jsonl` 存在時のみ）と (b) light/deep レトロの append 直後の 2 契機で行う。
 
 - `status=active` のレコードのみ掲載する
 - 全体最大 **20 件**、agent セクションあたり最大 **8 件**
@@ -157,7 +158,7 @@ proposal レポートの構成は以下のとおり。
 ### ステップ 6.7（軽量レトロ）
 
 1. Orchestrator が `git status --porcelain -- .iterate-team/knowledge/` で差分を確認する
-2. 個別 `git add`（`git add .` 禁止の既存規律に従う）
+2. 個別 `git add`（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` 配下の各ファイルを 1 件ずつ。`lessons.md` は git 管理外のため対象外。`git add -A` / `git add .` 禁止の既存規律に従う）
 3. 1 コミットにまとめる。subject は `docs: セッションレトロスペクティブ知見を記録`、フッタは `Refs: retrospective-<session-id>`
 4. host 環境では team-publisher の 2 回目 push に含める（PR Ready 化前のため同一 PR に含まれる）。dev container では commit のみ行う
 

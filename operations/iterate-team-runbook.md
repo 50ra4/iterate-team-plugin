@@ -811,7 +811,7 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 1. 戻り値 JSON フェンス（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を検証する。parse 失敗・必須キー欠落は 6.7.5 の fail-open へ
 2. `Bash git status --porcelain -- .iterate-team/knowledge/` で差分を確認する。差分なし（教訓抽出なし）の場合はコミットをスキップし 6.7.4 の runlog 記録へ進む（`lessons_recorded:0, proposals_recorded:0`）
-3. 差分あり: **個別 `git add`**（`lessons.jsonl` / `lessons.md` / `.gitattributes` / `proposals/` 配下の各ファイルを 1 件ずつ。`git add -A` / `git add .` 禁止）
+3. 差分あり: **個別 `git add`**（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` 配下の各ファイルを 1 件ずつ。`lessons.md` は git 管理外のため対象外。`git add -A` / `git add .` 禁止）
 4. 1 コミットにまとめる。subject `docs: セッションレトロスペクティブ知見を記録`、フッタ `Refs: retrospective-<session-id>`
 5. コミット失敗（pre-commit hook reject 等、exit 非 0）は 6.7.5 の fail-open へ
 

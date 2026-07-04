@@ -627,6 +627,52 @@ fi
 
 rm -rf "$T24_REPO"
 
+# ========== T25: .gitignore に lessons.md 行が冪等 seed される ==========
+# 修正: 並走セッションの digest add/add 競合を構造的に防ぐため、lessons.md を git 管理外
+# にする（.gitattributes の merge=union 行と同じ様式・同じタイミングで冪等 seed する）。
+run_case "T25: .gitignore の lessons.md 行は 2 回実行しても 1 行のまま（冪等 seed）"
+
+T25_REPO="$(make_isolated_repo)"
+
+CLAUDE_PROJECT_DIR="$T25_REPO" bash "$TARGET" "$VALID_RECORD" >/dev/null 2>&1
+CLAUDE_PROJECT_DIR="$T25_REPO" bash "$TARGET" "$VALID_RECORD" >/dev/null 2>&1
+
+T25_GITIGNORE="$T25_REPO/.iterate-team/knowledge/.gitignore"
+assert_path_exists ".gitignore が生成される" "$T25_GITIGNORE"
+assert_contains ".gitignore に lessons.md 行が含まれる" "lessons.md" "$(cat "$T25_GITIGNORE" 2>/dev/null)"
+
+T25_LINE_COUNT="$(grep -cxF "lessons.md" "$T25_GITIGNORE" 2>/dev/null || echo 0)"
+assert_eq "lessons.md 行は 1 行のみ（2 回実行後も重複しない）" "1" "$T25_LINE_COUNT"
+
+rm -rf "$T25_REPO"
+
+# ========== T26: append + digest 後、lessons.md は git status に現れない ==========
+# [本命の前提検証] append → digest 実行後、knowledge/ 配下を git status --porcelain で見ても
+# lessons.md は一切現れず（.gitignore により無視される）、lessons.jsonl / .gitattributes /
+# .gitignore のみが untracked として現れることを確認する。これが崩れていると、並走セッション
+# 間の digest add/add 競合（Codex レビュー第7ラウンド P1）が再発する。
+run_case "T26: append + digest 実行後、git status --porcelain -- .iterate-team/knowledge/ に lessons.md が現れない（jsonl/.gitattributes/.gitignore のみ）"
+
+T26_REPO="$(make_isolated_repo)"
+DIGEST_TARGET="${SCRIPT_DIR}/../knowledge-digest.sh"
+
+CLAUDE_PROJECT_DIR="$T26_REPO" bash "$TARGET" "$VALID_RECORD" >/dev/null 2>&1
+CLAUDE_PROJECT_DIR="$T26_REPO" bash "$DIGEST_TARGET" >/dev/null 2>&1
+
+assert_path_exists "lessons.md がディスク上には生成される" "$T26_REPO/.iterate-team/knowledge/lessons.md"
+
+T26_IGNORE_CHECK_RC=0
+git -C "$T26_REPO" check-ignore -q .iterate-team/knowledge/lessons.md || T26_IGNORE_CHECK_RC=$?
+assert_eq "lessons.md は git の無視対象と判定される" "0" "$T26_IGNORE_CHECK_RC"
+
+T26_PORCELAIN="$(cd "$T26_REPO" && git status --porcelain -uall -- .iterate-team/knowledge/)"
+assert_not_contains "git status --porcelain に lessons.md が現れない" "lessons.md" "$T26_PORCELAIN"
+assert_contains "git status --porcelain に lessons.jsonl は現れる" "lessons.jsonl" "$T26_PORCELAIN"
+assert_contains "git status --porcelain に .gitattributes は現れる" ".gitattributes" "$T26_PORCELAIN"
+assert_contains "git status --porcelain に .gitignore は現れる" ".gitignore" "$T26_PORCELAIN"
+
+rm -rf "$T26_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

@@ -20,7 +20,7 @@
 
 確定値の正本は [`knowledge-policy.md#7-注入規約`](./knowledge-policy.md#7-注入規約)。本節は Orchestrator 側の共通手順のみを扱う。
 
-Orchestrator はステップ 0.0（session-init 取得）で `<knowledge_digest_path>` = `<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パスを in-memory 保持する。**ファイル不在でもパスは保持したまま進む**（存在チェックは行わない。注入対象 agent 側が `Read` 失敗時に黙って skip する規約のため）。
+Orchestrator はステップ 0.0（session-init 取得）で `<knowledge_digest_path>` = `<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パスを in-memory 保持する。**ファイル不在でもパスは保持したまま進む**（存在チェックは行わない。注入対象 agent 側が `Read` 失敗時に黙って skip する規約のため）。`lessons.md` は git 管理外の生成物（`knowledge-policy.md` §2）であり、SessionStart hook が `lessons.jsonl` の存在時に再生成するため、通常セッションでは既に存在している（fresh clone 直後・並走セッションのマージ直後に生じうる不在・stale をこの hook 再生成が解消する）。knowledge 未導入リポジトリ等で `lessons.jsonl` 自体が無い場合は `lessons.md` も生成されず、その場合も従来どおり注入対象 agent 側が `Read` 失敗時に黙って skip する。
 
 注入対象は以下の 5 agent に限定する（prompt bloat 抑制）。
 

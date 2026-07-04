@@ -23,6 +23,8 @@
 #     dirty のままになるため、seed は検証の後段に置く）
 #       - knowledge/ , knowledge/proposals/ を mkdir -p
 #       - knowledge/.gitattributes に "lessons.jsonl merge=union" 行を（無ければ）追記
+#       - knowledge/.gitignore に "lessons.md" 行を（無ければ）追記（lessons.md を
+#         git 管理外にする。設計判断参照）
 #   - id / confidence / applied_count / merged_into / last_applied_ts を補完する。
 #     ts は補完ではなく常にスクリプト側の現在時刻で上書きする（呼び出し元が指定した
 #     ts は常に無視する。拒否ではなく上書き。理由は「設計判断: ts 上書き」参照）
@@ -51,6 +53,18 @@
 #   温存する必要があるため（同一レコードの更新であることを示す唯一の鍵）、現行のまま
 #   変更しない。
 #
+# 設計判断: lessons.md を git 管理外にする（Codex レビュー第7ラウンド P1 指摘・実機再現済み）。
+#   同一 base から並走した 2 セッションがそれぞれ append + digest + commit すると、
+#   lessons.jsonl は .gitattributes の `merge=union` により無競合で統合できるが、
+#   決定的に再生成される派生物である lessons.md は両ブランチが独立に新規生成するため
+#   マージ時に add/add 競合（新規ファイルの衝突は union merge driver が効かない）を起こし、
+#   ハーネスの自動マージを構造的に塞いでいた。lessons.jsonl を正本、lessons.md をその
+#   決定的な派生ビュー（knowledge-digest.sh がいつでも再生成可能）と位置づけ、派生物を
+#   git 追跡から外すことで並走マージの競合点そのものを除去する。merge=union は
+#   lessons.jsonl のみに効く設定であり、lessons.md 側の競合は解決しないため、
+#   「管理しない」以外の対策では並走セッション数が増えるほど衝突頻度が増す構造的問題を
+#   解消できない。
+#
 # 仕様の正本: <plugin_root>/operations/knowledge-policy.md（§3・§11）
 
 set -euo pipefail
@@ -75,6 +89,7 @@ repo_root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || 
 knowledge_dir="${repo_root}/.iterate-team/knowledge"
 lessons_file="${knowledge_dir}/lessons.jsonl"
 gitattributes_file="${knowledge_dir}/.gitattributes"
+gitignore_file="${knowledge_dir}/.gitignore"
 
 # ---- 検証ヘルパー ----
 # 与えた jq 式が真を返さない場合、理由を stderr に出して非 0 終了する。
@@ -179,6 +194,19 @@ if [[ ! -f "$gitattributes_file" ]] || ! grep -qxF "$GITATTR_LINE" "$gitattribut
     printf '\n' >> "$gitattributes_file"
   fi
   echo "$GITATTR_LINE" >> "$gitattributes_file"
+fi
+
+# lessons.md（knowledge-digest.sh が決定的に再生成する派生物）を git 管理外にする。
+# 並走セッションの digest add/add 競合を構造的に防止するための設計判断（ヘッダの
+# 「設計判断: lessons.md を git 管理外にする」参照）。merge=union は lessons.jsonl
+# のみに効くため、lessons.md 自体を untracked にする以外に競合を解消する手段がない。
+GITIGNORE_LINE="lessons.md"
+if [[ ! -f "$gitignore_file" ]] || ! grep -qxF "$GITIGNORE_LINE" "$gitignore_file" 2>/dev/null; then
+  # .gitattributes と同じ末尾改行ガード。
+  if [[ -s "$gitignore_file" ]] && [[ -n "$(tail -c1 "$gitignore_file" 2>/dev/null)" ]]; then
+    printf '\n' >> "$gitignore_file"
+  fi
+  echo "$GITIGNORE_LINE" >> "$gitignore_file"
 fi
 
 # ---- フィールド補完 ----

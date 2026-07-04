@@ -77,7 +77,7 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 
 ## knowledge（クロスセッション自己学習）
 
-各 run の完了直前（ステップ 6.7）に軽量レトロスペクティブ（`team-retrospector`、`mode=light`）が自動実行され、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/`（git-tracked）へ永続化する。記録された教訓は次回以降のセッションで `team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder` の起動プロンプトへダイジェスト（`lessons.md`）として自動注入される。軽量レトロのコミットは同一 PR に含まれるため、レビュー時に教訓の追加内容もあわせて確認できる。複数セッションを横断した重複統合・減衰・プラグイン改善提案の棚卸しは `/iterate-retrospect`（deep レトロスペクティブ）で行う。確定値・スキーマの正本は [`operations/knowledge-policy.md`](./operations/knowledge-policy.md) を参照。
+各 run の完了直前（ステップ 6.7）に軽量レトロスペクティブ（`team-retrospector`、`mode=light`）が自動実行され、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/` へ永続化する。正本 `lessons.jsonl` は git-tracked（commit 対象）だが、注入用ダイジェスト `lessons.md` は git 管理外の生成物であり、`lessons.jsonl` からセッション開始時（SessionStart hook）や記録直後に自動再生成される。記録された教訓は次回以降のセッションで `team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder` の起動プロンプトへこのダイジェスト（`lessons.md`）として自動注入される。軽量レトロのコミットは同一 PR に含まれるため、レビュー時に教訓の追加内容もあわせて確認できる。複数セッションを横断した重複統合・減衰・プラグイン改善提案の棚卸しは `/iterate-retrospect`（deep レトロスペクティブ）で行う。確定値・スキーマの正本は [`operations/knowledge-policy.md`](./operations/knowledge-policy.md) を参照。
 
 ## 仕組み（パス規約）
 
@@ -90,7 +90,7 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
   | `.iterate-team/state/`       | ignored（`.git/info/exclude` 自動登録）    |
   | `.iterate-team/tasks/`       | tracked                                    |
   | `.iterate-team/changes/`     | tracked                                    |
-  | `.iterate-team/knowledge/`   | tracked                                    |
+  | `.iterate-team/knowledge/`   | tracked（例外: `lessons.md` は `.gitignore` で除外され git 管理外） |
 
 ## 前提
 
