@@ -835,10 +835,9 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 `team-retrospector` の起動失敗 / 戻り値 JSON parse 失敗・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合:
 
-1. `Bash git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）
-2. `Bash git status --porcelain -- .iterate-team/knowledge/` に残る `??`（untracked）のファイル（例: 新規 `proposals/*.md`、初回実行時の `lessons.jsonl` / `lessons.md` / `.gitattributes`）を、`Bash mkdir -p .iterate-team/state/<session-id>/failed-retrospective/` を作成した上で `mv` により退避する。退避は `git status --porcelain` の `??` 出力に列挙された**パスを1件ずつ `mv`** する（**`.gitattributes` 等のドットファイルも対象に含まれる**ため、シェルグロブ `mv .iterate-team/knowledge/* .iterate-team/state/...` は使わない。glob はドットファイルを取りこぼし、`?? .iterate-team/knowledge/` が残存して次回 preflight の clean-tree ガードを誤発火させる）。`.iterate-team/state/` は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される。`git clean` は使わない
-3. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>","evacuated_to":"<退避先ディレクトリ。手順2で退避を行った場合のみ含める>"}` を追記
-4. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
+1. `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力する。clean 化に成功すれば exit 0、失敗時は stderr に診断を出して exit 1 を返す
+2. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>","evacuated_to":"<手順1のスクリプト stdout。出力があった場合のみ含める>"}` を追記する。手順1のスクリプトが exit 非 0 で終了した場合も、その旨を `reason` に含めて記録の上で続行する（fail-open は維持する）
+3. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
 
 push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する（6.7.3 参照）。
 

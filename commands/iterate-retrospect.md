@@ -38,15 +38,7 @@ argument-hint: [--sessions <N>] [--no-push]
    <N> は 1〜20 の整数で指定してください（既定 10）。
    ```
 
-2. `.iterate-team/state/` 直下のディレクトリのうち、直下に `runlog.jsonl` を持つものを列挙する。**`retro_*`（本コマンド自身が生成するディレクトリ）は分析対象から除外する**（deep レトロが過去の deep レトロ実行ログ自体を教訓抽出の素材にすることは想定しないため）。`runlog.jsonl` の mtime 降順で並べ、先頭から `<N>` 件を `<session_list>` として採用する:
-
-   ```bash
-   find .iterate-team/state -mindepth 1 -maxdepth 1 -type d -name 'retro_*' -prune -o -mindepth 1 -maxdepth 1 -type d -print \
-     | while read -r d; do
-         [[ -f "$d/runlog.jsonl" ]] && printf '%s\t%s\n' "$(stat -c %Y "$d/runlog.jsonl" 2>/dev/null || echo 0)" "${d##*/}"
-       done \
-     | sort -rn | cut -f2- | head -n "<N>"
-   ```
+2. `Bash <plugin_root>/scripts/retrospect-list-sessions.sh "<N>"` を実行する。`.iterate-team/state/` 直下に `runlog.jsonl` を持つセッションディレクトリ（`runlog.jsonl` が実在しないディレクトリはハーネスセッションとみなさず対象外とする。後段の `runlog-tail.sh <session_id>` が runlog 不在で exit 1 になることを防ぐ。`retro_*`（本コマンド自身が生成するディレクトリ）も除外。deep レトロが過去の deep レトロ実行ログ自体を教訓抽出の素材にすることは想定しないため）を、`runlog.jsonl` の mtime 降順（ディレクトリ自体の mtime ではない。runlog への追記で更新される = セッションの実活動順）で最大 `<N>` 件、セッション id を1行1件で stdout 出力するので、その出力から `<session_list>` を組み立てる。state 不存在または 0 件の場合は空出力・exit 0 で返る
 
 3. **0 件の場合**: 以下を報告して処理中止する（ブランチは未作成のため復元不要）:
 
@@ -74,7 +66,7 @@ argument-hint: [--sessions <N>] [--no-push]
    | `tasks_dir`    | 空文字列（deep モードは横断分析であり単一トピックの `tasks/` に紐づかないため未使用。agent 側の deep 手順もこのキーを参照しない） |
    | `topic_slug`   | `knowledge-retrospect`                                                                 |
    | `mode`         | `deep`                                                                                  |
-   | `session_list` | ステップ 1 で確定した各セッションについて `{session_id, runlog_path}` の配列。各セッションの runlog は `<plugin_root>/scripts` 経由ではなく agent 自身が `Bash tail -n 400 <runlog_path>` で bounded read すること（1 セッション分を丸ごと読み込まない）を明記して指示する |
+   | `session_list` | ステップ 1 で確定した各セッションについて `{session_id, runlog_path}` の配列。各セッションの runlog は agent 自身が `Bash <plugin_root>/scripts/runlog-tail.sh <session_id>` で bounded read すること（既定 400 行。パス検証つきラッパー。1 セッション分を丸ごと読み込まない）を明記して指示する |
 
    deep モードの責務（重複統合・矛盾解消・`lesson_applied` 集約・減衰・`knowledge-prune.sh --compact --apply`・`knowledge-digest.sh` 再生成・`proposals/INDEX.md` 更新）は `team-retrospector.md` 側の定義に従う。本コマンドはキーの受け渡しのみ行い、deep モードの内部手順を重複定義しない
 3. 戻り値の JSON フェンス（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を受領し、件数をステップ 6 の報告に使う
@@ -118,9 +110,9 @@ argument-hint: [--sessions <N>] [--no-push]
 
 team-retrospector の異常終了、またはステップ 4 のコミット失敗時は以下を行う。レトロスペクティブの失敗によってユーザー作業を止めないため、エスカレーションは行わない:
 
-1. `.iterate-team/knowledge/` を以下の2段階で復旧する: a) `Bash git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）。b) `Bash git status --porcelain -- .iterate-team/knowledge/` に残る `??`（untracked）のファイル（`.gitattributes` 等のドットファイルを含む）を、`Bash mkdir -p .iterate-team/state/<retro-session-id>/failed-retrospective/` を作成した上で `??` に列挙されたパスを1件ずつ `mv` により退避する（シェルグロブ `mv .iterate-team/knowledge/* ...` はドットファイルを取りこぼすため使わない。`git clean` も使わない。state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
+1. `.iterate-team/knowledge/` を `Bash <plugin_root>/scripts/knowledge-recover.sh "<retro-session-id>"` で復旧する。スクリプトは staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を `.iterate-team/state/<retro-session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
 2. 作成した `<retro-branch>` にコミットが 1 件もない（`<original-branch>` と同一 SHA）場合は `Bash git switch "<original-branch>"` の後 `Bash git branch -D "<retro-branch>"` でブランチを削除する。コミットが残っている場合は削除せずブランチのみ残し `<original-branch>` へ戻る
-3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>","evacuated_to":"<退避先ディレクトリ。手順1bで退避を行った場合のみ含める>"}'` を追記する
+3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>","evacuated_to":"<退避先ディレクトリ。手順1でスクリプトが退避先を出力した場合のみ含める>"}'` を追記する
 4. 失敗理由をユーザーへ報告して終了する
 
 ## 引数

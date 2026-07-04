@@ -2,7 +2,7 @@
 
 ## ステータス
 
-採用 (2026-05-13、2026-05-19 改訂: git 系ワイルドカード狭め込み、2026-06-01 改訂: git 系追加統合 + show-toplevel 追加 + runlog-agent-decision.sh 削除)
+採用 (2026-05-13、2026-05-19 改訂: git 系ワイルドカード狭め込み、2026-06-01 改訂: git 系追加統合 + show-toplevel 追加 + runlog-agent-decision.sh 削除、2026-07-04 改訂: runlog-agent-decision.sh 再追加 + knowledge fail-open のスクリプト集約（knowledge-recover.sh 追加、git restore/mv 個別許可・knowledge Edit 削除）+ git switch 引用符スコープ化・branch -D 追加 + `/iterate-retrospect` 用ラッパースクリプト 2 本（retrospect-list-sessions.sh / runlog-tail.sh）追加、52 エントリ)
 
 ## コンテキスト
 
@@ -16,7 +16,7 @@
 
 ## 決定
 
-`permissions.allow` を **40 エントリ** へ集約する (旧 39 エントリ → 1 次集約 29 → 2 次狭め込み 36 → 3 次 `--grep` プレフィックス限定 40 → 4 次 `--verify` 引用符付き 41 → 5 次 `switch -c` / `branch -m` 引用符付き 43 → 6 次 `iterate-validate-session` 追加 44 → 7 次 git 追加統合 41 → 8 次 `runlog-agent-decision.sh` 削除 40)。chrome-devtools 配下は agents の `tools:` 宣言と一致する 12 ツールを明示列挙する。git 系は **2026-05-19 のセキュリティレビュー** および **2026-06-01 の task-3_1_1 追加統合** を受け、ワイルドカードをサブセット統合する (`git rev-parse --verify HEAD` / `origin/main` / `claude/*` / `"claude/*` → `--verify *` / `--verify "*` の 2 種に統合、`git log -1 --format=%H` / `%s` / `%B` → `--format=*` の 1 種に統合、`git rev-parse --show-toplevel` を新規追加)。集約後の構造は意味カテゴリで並べる:
+`permissions.allow` を **52 エントリ** へ集約する (旧 39 エントリ → 1 次集約 29 → 2 次狭め込み 36 → 3 次 `--grep` プレフィックス限定 40 → 4 次 `--verify` 引用符付き 41 → 5 次 `switch -c` / `branch -m` 引用符付き 43 → 6 次 `iterate-validate-session` 追加 44 → 7 次 git 追加統合 41 → 8 次 `runlog-agent-decision.sh` 削除 40 → 9 次 (2026-07-04) `runlog-agent-decision.sh` 再追加 + knowledge 機構スクリプト 4 本追加 + `branch -D` 2 種追加 50 → 10 次 (2026-07-04 内訳確定) `/iterate-retrospect` 用ラッパースクリプト 2 本（`retrospect-list-sessions.sh` / `runlog-tail.sh`）追加 + `switch *` を引用符始まりの `switch "*` へ絞り込み `switch -c claude/*` 系 2 種を復元（三分割）+ `find .iterate-team/state *` / `tail -n *` を撤去 52)。chrome-devtools 配下は agents の `tools:` 宣言と一致する 12 ツールを明示列挙する。git 系は **2026-05-19 のセキュリティレビュー** および **2026-06-01 の task-3_1_1 追加統合** を受け、ワイルドカードをサブセット統合する (`git rev-parse --verify HEAD` / `origin/main` / `claude/*` / `"claude/*` → `--verify *` / `--verify "*` の 2 種に統合、`git log -1 --format=%H` / `%s` / `%B` → `--format=*` の 1 種に統合、`git rev-parse --show-toplevel` を新規追加)。集約後の構造は意味カテゴリで並べる:
 
 ```jsonc
 "allow": [
@@ -35,8 +35,12 @@
   "mcp__chrome-devtools__evaluate_script",
   "mcp__codex__codex",
 
-  // (2) ハーネス補助スクリプト (Bash ラッパー): 8 スクリプトを ./ なし形式に統一
+  // (2) ハーネス補助スクリプト (Bash ラッパー): 16 スクリプト (2026-07-04 改訂: runlog-agent-decision.sh 再追加 +
+  // iterate-validate-session.sh 追加 + knowledge 機構 4 本 (append/digest/prune/recover) 追加 +
+  // /iterate-retrospect 用ラッパー 2 本 (retrospect-list-sessions.sh / runlog-tail.sh) 追加)
   "Bash(<plugin_root>/scripts/runlog-append.sh *)",
+  "Bash(<plugin_root>/scripts/runlog-agent-decision.sh *)",
+  "Bash(<plugin_root>/scripts/iterate-validate-session.sh *)",
   "Bash(<plugin_root>/scripts/validate-plan.sh *)",
   "Bash(<plugin_root>/scripts/team-compute-waves.sh *)",
   "Bash(<plugin_root>/scripts/team-validate-plan.sh *)",
@@ -44,8 +48,17 @@
   "Bash(<plugin_root>/scripts/team-worktree-merge.sh *)",
   "Bash(<plugin_root>/scripts/team-worktree-cleanup.sh *)",
   "Bash(<plugin_root>/scripts/team-push-branch.sh *)",
+  "Bash(<plugin_root>/scripts/knowledge-append.sh *)",
+  "Bash(<plugin_root>/scripts/knowledge-digest.sh *)",
+  "Bash(<plugin_root>/scripts/knowledge-prune.sh *)",
+  "Bash(<plugin_root>/scripts/knowledge-recover.sh *)",
+  "Bash(<plugin_root>/scripts/retrospect-list-sessions.sh *)",
+  "Bash(<plugin_root>/scripts/runlog-tail.sh *)",
 
-  // (3) git read-only / ブランチ操作系: 17 種 (2026-06-01 改訂: --verify サブセット統合 + log -1 --format=* 統合 + show-toplevel 追加)
+  // (3) git read-only / ブランチ操作系: 19 種 (2026-07-04 改訂: switch を引用符スコープの 3 パターンへ
+  // 分割 (switch -c claude/* 系 2 種を復元 + 素の switch は switch "* の引用符始まりのみ許可)、
+  // branch -D claude/knowledge-retrospect-* 2 種を追加。旧 find .iterate-team/state * / tail -n *
+  // は (2) のラッパースクリプト 2 本へ置換したため本枠から撤去)
   "Bash(git worktree list*)",
   "Bash(git symbolic-ref --short HEAD)",
   "Bash(git remote get-url origin)",
@@ -54,18 +67,28 @@
   "Bash(git rev-parse --verify *)",
   "Bash(git rev-parse --verify \"*)",
   "Bash(git fetch origin main)",
-  "Bash(git status --porcelain)",
+  "Bash(git status --porcelain*)",
   "Bash(git switch -c claude/*)",
   "Bash(git switch -c \"claude/*)",
+  "Bash(git switch \"*)",
   "Bash(git branch -m claude/*)",
   "Bash(git branch -m \"claude/*)",
+  "Bash(git branch -D claude/knowledge-retrospect-*)",
+  "Bash(git branch -D \"claude/knowledge-retrospect-*)",
   "Bash(git log -1 --format=*)",
   "Bash(git log --grep=Refs:*)",
   "Bash(git log --grep=\"Refs:*)",
 
-  // (4) ハーネス状態の書き込み (.iterate-team/state/<session-id>/ 配下)
+  // (4) ハーネス状態の書き込み (.iterate-team/state/<session-id>/ 配下): 3 種
+  // (2026-07-04 改訂: preflight / retro セッションディレクトリ作成用の mkdir -p を追加)
   "Write(.iterate-team/state/*/**)",
-  "Edit(.iterate-team/state/*/**)"
+  "Edit(.iterate-team/state/*/**)",
+  "Bash(mkdir -p .iterate-team/state/*)",
+
+  // (5) knowledge (クロスセッション自己学習、git-tracked) の書き込み: 1 種
+  // (2026-07-04 改訂: Write のみ。Edit は knowledge-policy.md の直接編集禁止ポリシーと
+  // team-retrospector の tools 構成に合わせ付与しない)
+  "Write(.iterate-team/knowledge/**)"
 ]
 ```
 
@@ -111,6 +134,27 @@
     - `Bash(git log --grep=Refs:*)` / `Bash(git log --grep="Refs:*)`: `Refs: task-` / `Refs: plan-` 追跡が `<plugin_root>/commands/iterate-team.md` で前提化されており、`Refs:` プレフィックスへ限定することで Refs フッタ検索専用に絞り込む。`--grep=` をワイルドカード単独で許可していた旧パターンを廃止し、grep パターンを空にして履歴全件抽出する経路を構造的に塞ぐ (PR #94 P1)。
     - `Bash(git remote get-url origin)`: `team-publisher` の owner/repo 一致検証 (fork や別 repo への push 拒否) に必須。本リポジトリは公開 GitHub HTTPS で `git remote` にトークン埋め込みする運用が無いため、URL 漏洩リスクは限定的。
 
+- **`Bash(<plugin_root>/scripts/runlog-agent-decision.sh *)` の再追加 (2026-07-04 改訂)**:
+  - 2026-06-01 改訂は「どのファイルからも直接呼び出されていない」ことを根拠に削除した。本 PR のステップ 6.7.1 で `<plugin_root>/commands/iterate-team.md` / `<plugin_root>/commands/iterate-review.md` / `<plugin_root>/operations/iterate-team-runbook.md` が `runlog-agent-decision.sh` を直接呼び出すようになったため、削除の前提が失効した。allowlist に再追加する。
+
+- **knowledge 機構スクリプト 4 本 (`knowledge-append.sh` / `knowledge-digest.sh` / `knowledge-prune.sh` / `knowledge-recover.sh`) の追加 (2026-07-04 改訂)**:
+  - knowledge（クロスセッション自己学習、[`knowledge-policy.md`](./knowledge-policy.md) 参照）の記録・再生成・圧縮・fail-open 復旧を、手順書に記述された散文シェル手順（`git restore --staged --worktree` の個別許可 2 種 + `mv` による退避コマンドの個別許可 2 種など）からスクリプトへ集約した。個別 git サブコマンドを allowlist に列挙する方式は文言の変更ごとに allowlist 側の追従が必要で事故りやすく、スクリプト集約によって allowlist は「このスクリプトを実行してよいか」の1点に単純化される。
+
+- **`Bash(git status --porcelain)` → `Bash(git status --porcelain*)` への拡張**:
+  - `.iterate-team/knowledge/` 配下の差分確認のように pathspec 付き呼び出し (`git status --porcelain -- .iterate-team/knowledge/`) が必要になったため、末尾ワイルドカードへ拡張した。`--porcelain` は非破壊の read-only 診断コマンドであり、pathspec の追加はスコープを狭める方向にしか働かないため権限拡大には該当しない。
+
+- **`Bash(mkdir -p .iterate-team/state/*)` / `Write(.iterate-team/knowledge/**)` の追加、`Edit(.iterate-team/knowledge/**)` を追加しない判断**:
+  - `mkdir -p .iterate-team/state/*` は preflight / retro セッションディレクトリの作成に必須（`knowledge-recover.sh` 自体の呼び出しには不要だが、fail-open 手順が呼び出す前段で必要になる）。`Write(.iterate-team/knowledge/**)` は team-retrospector が `proposals/*.md` / `proposals/INDEX.md` を新規作成するために必須。一方 `Edit(.iterate-team/knowledge/**)` は付与しない: [`knowledge-policy.md`](./knowledge-policy.md) が `lessons.jsonl` / `lessons.md` への直接編集を禁止し（更新は `knowledge-append.sh` の append のみで表現し、`lessons.md` は `knowledge-digest.sh` が再生成する）、`team-retrospector` agent の `tools:` 宣言にも `Edit` は含まれない。どの主体も使わない権限は付与しない。
+
+- **`Bash(git switch "*)` の追加（引用符始まり限定）+ `Bash(git switch -c claude/*)` / `Bash(git switch -c "claude/*)` の復元、`Bash(git branch -D claude/knowledge-retrospect-*)` 系の追加 (2026-07-04 改訂)**:
+  - `/iterate-retrospect` が deep レトロ完了後に元ブランチへ戻る際、新規ブランチ作成を伴わない素の `Bash git switch "<original-branch>"` を使う。2026-06-01 時点の `switch -c claude/*` 限定パターンはこの呼び出しに一致せず、都度 permission ask が発生していた。当初は `Bash(git switch *)`（ワイルドカード 1 種）へ統合する案を検討したが、これは `git switch -f` / `git switch -C <branch>` / `git switch --discard-changes` のような**未コミット変更を破棄しうるフラグ形**（引用符なしで始まる任意引数）も無条件許可してしまい、2026-05-19 改訂の「ワイルドカードの広さを実使用パターンへ狭める」方針（本書該当節）と逆行する。このため `switch *` は採用せず、`Bash(git switch "*)`（**引用符で始まる引数のみ**を許可）へ絞り込む。`git switch "<original-branch>"` のように呼び出し元が二重引用符で始める限りこのパターンに一致し、`-f` 等の非引用フラグ形は構造的に allowlist から除外される（コマンド側 `iterate-retrospect.md` も二重引用符付きの `git switch "<original-branch>"` を規定しており、両者が対になって安全性を担保する）。`switch -c claude/*` / `switch -c "claude/*` の 2 種はブランチ新規作成用として独立に必要なため、`switch *` への統合前の形へ復元する。
+  - `Bash(git branch -D claude/knowledge-retrospect-*)` / `Bash(git branch -D "claude/knowledge-retrospect-*)` は `/iterate-retrospect` の fail-open（deep レトロでコミットが 1 件も無い場合）で使う retro ブランチ削除用。対象を `claude/knowledge-retrospect-*` に限定し、他の `claude/*` ブランチの削除は依然 ask に委ねる。
+
+- **`Bash(find .iterate-team/state *)` / `Bash(tail -n *)` を撤去し、`Bash(<plugin_root>/scripts/retrospect-list-sessions.sh *)` / `Bash(<plugin_root>/scripts/runlog-tail.sh *)` へ置換 (2026-07-04 改訂)**:
+  - `find` は `-exec` / `-delete` オプションにより任意コマンド実行・任意ファイル削除が可能な昇格プリミティブであり、`Bash(find .iterate-team/state *)` のように起点パスを固定してもオプション部分はワイルドカードで素通しになるため、`find .iterate-team/state -exec rm -rf / \;` のような呼び出しを字面上排除できない。`tail -n *` も同様に、`-n` 以降の引数（対象パス）を検証しないため `tail -n 1 ~/.ssh/id_rsa` のように任意パスを読み取れ、Bash 経由で `permissions.deny` の `Read(~/.ssh/**)` / `Read(~/.aws/**)` を迂回する。いずれも生コマンドの allow は採用しない。
+  - 代替として `<plugin_root>/scripts/retrospect-list-sessions.sh <N>`（`.iterate-team/state/` 配下のセッション列挙専用。`retro_*` を除外し mtime 降順で最大 N 件のセッション id のみを出力）と `<plugin_root>/scripts/runlog-tail.sh <session-id> [<lines>]`（session-id のパス安全性を検証した上で当該セッションの runlog.jsonl 末尾のみを bounded read）の 2 本のラッパースクリプトへ置換する。引数検証つきラッパースクリプトを allowlist に個別列挙する方式は、`team-push-branch.sh`（push の force/refspec 等を内部で拒否）や `knowledge-recover.sh`（fail-open 復旧手順を集約）と同様、本 ADR がすでに採用している確立パターンである（前掲「knowledge 機構スクリプト 4 本の追加」節）。生コマンドの allow を維持したまま用途を狭めるより、検証ロジックをスクリプト側に閉じ込め allowlist は「このスクリプトを実行してよいか」の1点に単純化する方が安全である。
+  - 両スクリプトは `<plugin_root>/scripts/` 配下に置かれるため group (2)（ハーネス補助スクリプト）へ追加し、削除した `find` / `tail` の元の枠であった group (3) からは撤去する。
+
 ### 棄却した代替案
 
 | 案                                                    | 棄却理由                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -142,10 +186,28 @@
 | `git rev-parse --show-toplevel` (未登録)                              | 0              | 1             | +1   |
 | `<plugin_root>/scripts/runlog-agent-decision.sh` (未使用エントリ削除) | 1              | 0             | -1   |
 
+### knowledge fail-open スクリプト集約 + git switch 引用符スコープ化 + find/tail のラッパースクリプト化 (2026-07-04)
+
+| 指標                                                                                     | Before (40 件) | After (52 件) | 変化 |
+| ---------------------------------------------------------------------------------------- | -------------- | ------------- | ---- |
+| allow エントリ数                                                                          | 40             | 52            | +12  |
+| `<plugin_root>/scripts/runlog-agent-decision.sh` (再追加)                                | 0              | 1             | +1   |
+| knowledge 機構スクリプト (`append`/`digest`/`prune`/`recover`)                            | 0              | 4             | +4   |
+| `/iterate-retrospect` 用ラッパー (`retrospect-list-sessions.sh`/`runlog-tail.sh`) (新規)  | 0              | 2             | +2   |
+| `Bash(mkdir -p .iterate-team/state/*)`                                                   | 0              | 1             | +1   |
+| `Write(.iterate-team/knowledge/**)`                                                      | 0              | 1             | +1   |
+| `git switch` 系 (`switch -c claude/*` 2 種 + `switch "*` 1 種)                            | 2              | 3             | +1   |
+| `git branch -D claude/knowledge-retrospect-*` 系 (新規)                                  | 0              | 2             | +2   |
+| `Bash(find .iterate-team/state *)` (検討したが不採用。`-exec`/`-delete` の昇格リスクのため) | 0              | 0             | 0    |
+| `Bash(tail -n *)` (検討したが不採用。任意パス読み取りで `Read` deny を迂回するため)         | 0              | 0             | 0    |
+| `git status --porcelain` → `git status --porcelain*`（エントリ数不変）                    | 1              | 1             | 0    |
+| `Edit(.iterate-team/knowledge/**)`（付与しない判断。40 件時点で未登録）                    | 0              | 0             | 0    |
+
 ## リスク評価
 
 - **広すぎる権限の付与**: 今回の改訂では chrome-devtools 配下を agents `tools:` 宣言と一致する 12 ツールの明示列挙に保つため、新たな権限拡大は発生しない。旧 allow との差分は `list_pages` / `handle_dialog` を削除、`close_page` / `resize_page` を追加。`close_page` / `resize_page` は agents 側で既に許可されていた browser sandbox 内操作のため、許可漏れの整合を取った形であり権限拡大には該当しない。
 - **2026-06-01 追加統合のリスク**: `Bash(git rev-parse --verify *)` への統合により、`HEAD` / `origin/main` / `claude/*` 以外の任意 ref 検証が可能になる。ただし `--verify` は ref が実在するかの検証のみ（破壊的操作なし）であり、リードオンリー操作の範囲内。`git rev-parse --show-toplevel` は worktree ルート取得のみで情報漏洩リスクは限定的。`Bash(git log -1 --format=*)` への統合では `%ae` 等のメールアドレス抽出も理論上可能になるが、`-1` 制約で最新 1 件のみに限定される。
+- **2026-07-04 追加統合のリスク**: `git switch` は素のワイルドカード `Bash(git switch *)` への統合を検討したが不採用とした。`switch -f` / `switch -C <branch>` / `switch --discard-changes` のような未コミット変更を破棄しうるフラグ形を非引用のまま無条件許可してしまい、2026-05-19 改訂の「ワイルドカードの広さを実使用パターンへ狭める」方針（本書上記節）に反するためである。代わりに `Bash(git switch "*)`（引用符で始まる引数のみ許可）へ絞り込み、コマンド側（`iterate-retrospect.md`）が規定する二重引用符付き呼び出し `git switch "<original-branch>"` のみを構造的に通す。`switch -c claude/*` 系 2 種は `claude/` 接頭辞限定のブランチ新規作成用として維持し、ブランチ切替自体は内容の破壊を伴わない（dirty worktree への切替は git 自身が拒否し、`-c` の新規作成も reflog で復元可能）。`Bash(git branch -D claude/knowledge-retrospect-*)` は削除対象を deep レトロ専用ブランチ名に限定しており、人手ブランチや `claude/*-pending` 等の他用途ブランチは対象外。`find` / `tail` の生コマンド allow（`Bash(find .iterate-team/state *)` / `Bash(tail -n *)`）は検討したが不採用とした: `find` は `-exec` / `-delete` により任意コマンド実行・削除が可能な昇格プリミティブであり、`tail -n *` は対象パスを検証しないため Bash 経由で `permissions.deny` の `Read(~/.ssh/**)` 等を迂回できる。代わりに引数検証つきラッパースクリプト `<plugin_root>/scripts/retrospect-list-sessions.sh` / `<plugin_root>/scripts/runlog-tail.sh` を group (2) に追加した。これは `team-push-branch.sh` 以来、本 ADR が採用している「検証ロジックをスクリプト側に閉じ込め、allowlist は実行可否の1点に単純化する」確立パターンの適用である。`Edit(.iterate-team/knowledge/**)` を付与しない判断により、knowledge-policy.md の直接編集禁止ポリシーが allowlist レベルでも構造的に裏付けられる。
 - **deny / ask との整合**: push 経路は team-publisher 経由の `<plugin_root>/scripts/team-push-branch.sh` ラッパー（`claude/` 接頭辞限定 + force/refspec/特殊 ref を allowlist 拒否）のみが無プロンプト allow されている設計を継続。直接 `git push` は主要な破壊的形態（force / `--force-with-lease` / `--mirror` / `--delete` / `+refspec` 等）を `permissions.deny` で遮断し、残りは `permissions.ask` の `Bash(git push *)` で人間確認に回す。短縮結合フラグ（`git push -uf` 等）は glob 列挙では branch 名衝突なしに塞げないため deny ではなく ask に委ねる（Claude Code on web は terminal が無く直接 push の唯一の対話手段が ask のため、全面 deny は採らない）。
 - **後方互換**: 削除した `./scripts/...` 形式を実行する呼び出しは現行コードに存在しない (`<plugin_root>/commands/*.md` / `<plugin_root>/agents/*.md` を grep 確認済み)。
 

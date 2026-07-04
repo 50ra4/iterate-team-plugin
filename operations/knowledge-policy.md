@@ -19,7 +19,7 @@
 
 ```
 .iterate-team/knowledge/     # git-tracked（state/ と異なり commit 対象。tasks/・changes/ と同格）
-  lessons.jsonl               # 構造化レコードの正本（append-only、同一 id は最終行勝ち）
+  lessons.jsonl               # 構造化レコードの正本（append-only、同一 id は ts が最新のレコードが正。merge=union はブランチ統合時に行順を保証しないため物理行順に依存しない）
   lessons.md                  # 注入用ダイジェスト（knowledge-digest.sh が決定的に再生成）
   proposals/                  # プラグイン改善提案レポート（人間向け、自動編集しない）
     YYYYMMDD_<slug>.md
@@ -60,7 +60,7 @@
 
 更新（hit-count 加算・deprecate・merge）は**同一 `id` の上書きレコードを append することで表現する**（rewrite しない）。これにより flock append のみで並走安全性を確保する。物理圧縮は `knowledge-prune.sh --compact` のみが行う。
 
-上書きレコードは部分フィールドではなく、**既存レコード（同一 `id` の最終レコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える**。`knowledge-append.sh` は上書きレコードにも新規と同一の必須キー検証を適用する。
+上書きレコードは部分フィールドではなく、**既存レコード（同一 `id` のうち ts が最新のレコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える**。`knowledge-append.sh` は上書きレコードにも新規と同一の必須キー検証を適用する。
 
 ## 4. ダイジェスト `lessons.md` の掲載規則
 
@@ -69,6 +69,8 @@
 - `status=active` のレコードのみ掲載する
 - 全体最大 **20 件**、agent セクションあたり最大 **8 件**
 - 選定順: `confidence desc → applied_count desc → ts desc`
+- 同一 `id` が複数行ある場合は ts が最新のレコードを正とする（merge=union はブランチ統合時に行順を保証しないため物理行順に依存しない）
+- 不正行（JSON として parse 不能、または JSON として妥当だが object でない行）は警告を出してスキップする。正常なレッスンの `lessons.md` への出力は維持する
 - 1 件 1 行 `- [L-xxxx] <lesson>`
 - セクション構成は以下の順とする。
 
@@ -105,8 +107,9 @@
 - **減衰条件**: 「直近 5 セッションの runlog に `lesson_applied` なし **AND** 初回記録から 30 日超」に該当するレッスンは、`status: deprecated` の上書きレコードを append する
 - **重複統合**: `evidence` が多い側を残し、他方を `status: merged` とし `merged_into` に残す側の `id` を設定する
 - **降格・改訂**: 「適用されたのに同カテゴリの失敗が再発」した場合、`confidence` を降格するか教訓文（`lesson`）を改訂する
-- **物理削除**: `knowledge-prune.sh --compact --apply` によってのみ実施する。同一 `id` の圧縮（最終レコードのみ残す）、および `status: deprecated` かつ初回記録から **90 日超**のレコードの削除を行う
-- **上書きレコードの発行方式**: 上記「減衰条件」「重複統合」「降格・改訂」がいずれも発行する上書きレコードは §3 と同一の方式に従う。既存レコード（同一 `id` の最終レコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える。`knowledge-append.sh` は新規レコードと同一の必須キー検証をここでも適用する
+- **物理削除**: `knowledge-prune.sh --compact --apply` によってのみ実施する。同一 `id` の圧縮（ts が最新のレコードのみ残す）、および `status: deprecated` かつ初回記録から **90 日超**のレコードの削除を行う
+- **上書きレコードの発行方式**: 上記「減衰条件」「重複統合」「降格・改訂」がいずれも発行する上書きレコードは §3 と同一の方式に従う。既存レコード（同一 `id` のうち ts が最新のレコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える。`knowledge-append.sh` は新規レコードと同一の必須キー検証をここでも適用する
+- **不正行のフェイルクローズ**: `lessons.jsonl` に非 JSON、または JSON として妥当だが object でない行が混入している場合、`knowledge-prune.sh` は該当行番号を含むエラーを出して **exit 1** で中止する（dry-run / `--apply` のいずれも同様）。物理書き換えを伴うスクリプトのため不正行を黙殺せず fail-closed とする
 
 ## 7. 注入規約
 
@@ -162,10 +165,9 @@ proposal レポートの構成は以下のとおり。
 
 レトロスペクティブが失敗した場合は以下のとおり fail-open する。
 
-1. `git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）
-2. 残る untracked ファイル（`git status --porcelain -- .iterate-team/knowledge/` の `??`。`.gitattributes` 等のドットファイルを含む）を、`mkdir -p` した `.iterate-team/state/<session-id>/failed-retrospective/`（`/iterate-retrospect` の場合は `<retro-session-id>`）へ `mv` で退避する。`??` に列挙されたパスを1件ずつ `mv` すること。シェルグロブ `mv .iterate-team/knowledge/* ...` は使わない（ドットファイルを取りこぼし `??` が残存するため）。`git clean` は使わない（state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
-3. runlog に `retrospective_failed` を記録する（退避を行った場合は detail に `evacuated_to` を含める）
-4. ステップ 7 へ続行する（PR 完了を阻害しない）
+1. `<plugin_root>/scripts/knowledge-recover.sh "<session-id>"`（`/iterate-retrospect` の場合は `<retro-session-id>`）を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（`git clean` は使わず、生成物は人間の事後調査用に温存する）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
+2. runlog に `retrospective_failed` を記録する（スクリプトが退避先を出力した場合のみ detail に `evacuated_to` を含める。スクリプトが exit 非 0 の場合もその旨を reason に含めて記録の上で続行する）
+3. ステップ 7 へ続行する（PR 完了を阻害しない）
 
 ### deep レトロ（`/iterate-retrospect`）
 
@@ -183,7 +185,7 @@ proposal レポートの構成は以下のとおり。
 | --------------------------- | ---------------------------------------------------------------------- |
 | `retrospective_started`     | `{"mode": "light"}`（`session_id` は `runlog-append.sh` が top-level に自動付与するため detail には含めない）|
 | `retrospective_completed`   | light: `{"mode": "light", "lessons_recorded": 2, "proposals_recorded": 0}` / deep（変更あり）: `{"mode":"deep","new_lessons":N,"updated_lessons":N,"deprecated":N,"proposals":N}` / deep（変更なし）: `{"mode":"deep","lessons_recorded":0,"changed":false}` |
-| `retrospective_failed`      | `{"mode": "light", "reason": "git restore 実行、要因: ...", "evacuated_to": ".iterate-team/state/<session-id>/failed-retrospective/"}`（`evacuated_to` は untracked 生成物の退避を行った場合のみ含める任意キー） |
+| `retrospective_failed`      | `{"mode": "light", "reason": "knowledge-recover 実行、要因: ...", "evacuated_to": ".iterate-team/state/<session-id>/failed-retrospective/"}`（`evacuated_to` は untracked 生成物の退避を行った場合のみ含める任意キー） |
 | `lesson_recorded`           | `{"lesson_id": "L-20260703T0930-a1b2", "category": "review"}`           |
 | `lesson_applied`            | 自己記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner"}` / 代理記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner", "recorded_by": "orchestrator"}` |
 | `plugin_proposal_recorded`  | `{"path": "proposals/20260703_xxx.md", "target_asset": "..."}`          |
@@ -193,8 +195,9 @@ proposal レポートの構成は以下のとおり。
 | スクリプト             | 役割                                                     |
 | ---------------------- | -------------------------------------------------------- |
 | `knowledge-append.sh`  | flock append + 検証 + `id` 生成                          |
-| `knowledge-digest.sh`  | `lessons.md` の決定的再生成                               |
-| `knowledge-prune.sh`   | dry-run 既定の圧縮（`--compact --apply` でのみ物理削除）  |
+| `knowledge-digest.sh`  | `lessons.md` の決定的再生成。不正行は警告スキップ         |
+| `knowledge-prune.sh`   | dry-run 既定の圧縮（`--compact --apply` でのみ物理削除）。不正行混入時は行番号つきエラーで exit 1（fail-closed） |
+| `knowledge-recover.sh` | fail-open 復旧（unstage → HEAD 追跡ファイルの worktree 復元 → untracked 退避）|
 
 ## 12. 関連ドキュメント
 

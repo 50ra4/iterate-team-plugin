@@ -302,6 +302,102 @@ assert_eq "L-t6-dup は圧縮されて最終レコード(second)のみ残る" "s
 
 rm -rf "$T6_REPO"
 
+# ========== T7 [修正4 回帰] 構文エラー行混入 → fail-closed で exit 1 ==========
+# digest は「黙ってスキップ」で許容するが、prune は書き換えを伴うためデータ喪失
+# リスクがあり、不正行が1行でもあれば fail-closed で中断しなければならない
+# （実機確認済み。修正前は jq エラーが未捕捉で伝播し契約外の exit 5 になっていた）。
+run_case "T7: 構文エラー行が混入している場合、dry-run でも exit 1・エラーメッセージに行番号・lessons.jsonl は無変更"
+
+T7_REPO="$(make_isolated_repo)"
+T7_KNOWLEDGE="$T7_REPO/.iterate-team/knowledge"
+mkdir -p "$T7_KNOWLEDGE"
+T7_JSONL="$T7_KNOWLEDGE/lessons.jsonl"
+
+make_record "L-t7-a" "2026-01-01T00:00:00Z" "active" "lesson a" > "$T7_JSONL"
+echo 'this is not valid json {{{' >> "$T7_JSONL"
+make_record "L-t7-b" "2026-01-02T00:00:00Z" "active" "lesson b" >> "$T7_JSONL"
+
+T7_BEFORE_HASH="$(sha256sum "$T7_JSONL" | awk '{print $1}')"
+
+set +e
+T7_STDERR=$(CLAUDE_PROJECT_DIR="$T7_REPO" bash "$TARGET" --compact 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+T7_AFTER_HASH="$(sha256sum "$T7_JSONL" | awk '{print $1}')"
+
+assert_eq "exit code 1（fail-closed。契約外の exit 5 ではない）" "1" "$exit_code"
+assert_contains "stderr に行番号(2)が明示される" "2" "$T7_STDERR"
+assert_eq "lessons.jsonl は無変更（dry-run 相当）" "$T7_BEFORE_HASH" "$T7_AFTER_HASH"
+
+# --apply を付けても同様に中断され、無変更のままであることを確認する。
+set +e
+T7B_STDERR=$(CLAUDE_PROJECT_DIR="$T7_REPO" bash "$TARGET" --compact --apply 2>&1 1>/dev/null)
+exit_code_apply=$?
+set -e
+T7B_AFTER_HASH="$(sha256sum "$T7_JSONL" | awk '{print $1}')"
+
+assert_eq "--apply でも exit code 1" "1" "$exit_code_apply"
+assert_eq "--apply でも lessons.jsonl は無変更" "$T7_BEFORE_HASH" "$T7B_AFTER_HASH"
+
+rm -rf "$T7_REPO"
+
+# ========== T8 [修正4 回帰] 非 object 行混入 → fail-closed で exit 1 ==========
+run_case "T8: 非 object の JSON 行（42 単体）が混入している場合、exit 1・エラーメッセージに行番号・lessons.jsonl は無変更"
+
+T8_REPO="$(make_isolated_repo)"
+T8_KNOWLEDGE="$T8_REPO/.iterate-team/knowledge"
+mkdir -p "$T8_KNOWLEDGE"
+T8_JSONL="$T8_KNOWLEDGE/lessons.jsonl"
+
+make_record "L-t8-a" "2026-01-01T00:00:00Z" "active" "lesson a" > "$T8_JSONL"
+echo '42' >> "$T8_JSONL"
+make_record "L-t8-b" "2026-01-02T00:00:00Z" "active" "lesson b" >> "$T8_JSONL"
+
+T8_BEFORE_HASH="$(sha256sum "$T8_JSONL" | awk '{print $1}')"
+
+set +e
+T8_STDERR=$(CLAUDE_PROJECT_DIR="$T8_REPO" bash "$TARGET" --compact --apply 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+T8_AFTER_HASH="$(sha256sum "$T8_JSONL" | awk '{print $1}')"
+
+assert_eq "exit code 1（fail-closed）" "1" "$exit_code"
+assert_contains "stderr に行番号(2)が明示される" "2" "$T8_STDERR"
+assert_eq "lessons.jsonl は無変更" "$T8_BEFORE_HASH" "$T8_AFTER_HASH"
+
+rm -rf "$T8_REPO"
+
+# ========== T9 [修正5 回帰] merge=union による物理行順の破壊への耐性（新しい ts 勝ち） ==========
+# .gitattributes の merge=union はブランチ統合時に同一 id の物理行順を保証しない。
+# 「新しい ts のレコードが物理的に先、古い ts が後」という再現の並びを直接組み立て、
+# --apply が新しい ts 側のみを残す（物理最終行の古いレコードで新しいレコードを
+# 誤って物理削除しない）ことを検証する。
+run_case "T9: 同一 id で新しい ts のレコードが物理的に先・古い ts が後（merge=union 再現）でも --apply は新しい ts 側のみ残す"
+
+T9_REPO="$(make_isolated_repo)"
+T9_KNOWLEDGE="$T9_REPO/.iterate-team/knowledge"
+mkdir -p "$T9_KNOWLEDGE"
+T9_JSONL="$T9_KNOWLEDGE/lessons.jsonl"
+
+# 物理的に先: ts が新しい。物理的に後: ts が古い（旧「最終行勝ち」だとこちらが残ってしまう）。
+make_record "L-t9-dup" "2026-06-01T00:00:00Z" "active" "newer-ts-physically-first" > "$T9_JSONL"
+make_record "L-t9-dup" "2026-01-05T00:00:00Z" "active" "older-ts-physically-last" >> "$T9_JSONL"
+
+set +e
+stdout=$(CLAUDE_PROJECT_DIR="$T9_REPO" bash "$TARGET" --compact --apply 2>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 0" "0" "$exit_code"
+T9_LINE_COUNT="$(wc -l < "$T9_JSONL" | tr -d ' ')"
+assert_eq "圧縮後は1行のみ残る" "1" "$T9_LINE_COUNT"
+T9_KEPT_LESSON="$(jq -r 'select(.id=="L-t9-dup") | .lesson' "$T9_JSONL")"
+assert_eq "新しい ts 側（newer-ts-physically-first）のみ残る" "newer-ts-physically-first" "$T9_KEPT_LESSON"
+
+rm -rf "$T9_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

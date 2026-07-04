@@ -7,7 +7,11 @@
 # 動作:
 #   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl を読み、lessons.md を
 #     決定的に再生成する（掲載規則は knowledge-policy.md §4 の確定値）。
-#       - 同一 id は最終行勝ち
+#       - 同一 id は最新 ts 勝ち（物理行順非依存。max_by(.ts // "")。
+#         .gitattributes の `lessons.jsonl merge=union` はブランチ統合時に同一 id の
+#         行順を保証しないため、「最終行勝ち」は統合後に古いレコードを正として
+#         採用してしまう実バグがあった。ts 欠落は最劣位、同一 ts はタイブレークで
+#         物理順が優先される）
 #       - status=active のみ掲載
 #       - 選定順: confidence desc（high > medium > low） → applied_count desc → ts desc
 #       - 全体最大 20 件・セクションあたり最大 8 件（全体上位 20 件を先に確定し、
@@ -74,14 +78,29 @@ if [[ -z "$manual_block" ]]; then
   manual_block=$'<!-- manual:start -->\n<!-- manual:end -->'
 fi
 
-# ---- 全体上位 20 件プール算出（status=active、同一 id 最終行勝ち） ----
+# ---- 全体上位 20 件プール算出（status=active、同一 id は最新 ts 勝ち） ----
 # lessons.jsonl が無い/空なら空プール。
 # 不正 JSON 行が混入していても、その行だけをスキップし残りは正常にダイジェスト化する
 # （tolerant パース）。全体を `[]` にフォールバックすると、正常な既存レコードの digest
 # までもが不正 1 行のせいで消え失せてしまうため（PR レビュー指摘）。
+# tolerant パース段では `select(type == "object")` も課す。構文的に妥当な JSON だが
+# object でない行（例: `42` 単体の行）は、fromjson 自体は成功してしまうため
+# `fromjson? // empty` だけでは弾けず、後段の group_by(.id) 等が「オブジェクトの
+# フィールドを非オブジェクトに対して参照しようとして型エラーで失敗」→
+# `|| echo '[]'` により正常レコードまで含めてプール全体が空に化ける、という実バグが
+# あった（実機確認済み）。select(type == "object") を通過しない行は構文エラー行と
+# 同じ「malformed line」として下記の警告カウントに含める。
+#
+# 同一 id が複数行ある場合、`ts` が最新のレコードを採用する（`max_by(.ts // "")`）。
+# 物理行順（group_by の安定ソートによる出現順）に依存する「最終行勝ち」は採用しない。
+# .gitattributes の `lessons.jsonl merge=union` はブランチ統合時に同一 id の物理行順を
+# 保証しないため、統合後に古いレコードが物理的に最終行へ来ることがあり、その場合
+# 「最終行勝ち」だと古いレコードを誤って正として採用してしまう（実機再現済み）。
+# jq の max_by はタイ時に入力順で後の要素を返すため、同一 ts の場合は物理順が自然な
+# タイブレークになる。ts 欠落レコードは `.ts // ""` で最劣位になる。
 if [[ -s "$lessons_jsonl" ]]; then
   total_line_count="$(wc -l < "$lessons_jsonl" | tr -d ' ')"
-  valid_json_lines="$(jq -R -c 'fromjson? // empty' "$lessons_jsonl" 2>/dev/null)"
+  valid_json_lines="$(jq -R -c '(fromjson? // empty) | select(type == "object")' "$lessons_jsonl" 2>/dev/null)"
   valid_line_count="$(printf '%s\n' "$valid_json_lines" | grep -c '.' || true)"
   valid_line_count="${valid_line_count:-0}"
 
@@ -91,7 +110,7 @@ if [[ -s "$lessons_jsonl" ]]; then
 
   pool="$(printf '%s\n' "$valid_json_lines" | jq -s '
     group_by(.id)
-    | map(last)
+    | map(max_by(.ts // ""))
     | map(select(.status == "active"))
     | map(. + {_rank: (if .confidence == "high" then 3
                         elif .confidence == "medium" then 2

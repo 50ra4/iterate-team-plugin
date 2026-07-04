@@ -517,6 +517,66 @@ assert_eq "偽造しようとした行が独立した箇条書き行として解
 
 rm -rf "$T13_REPO"
 
+# ========== T14 [修正3 回帰] 非 object の JSON 行（構文的に妥当だが object でない） ==========
+# 修正前は `echo '42' >> lessons.jsonl` のような「構文的に妥当な JSON だが object でない」
+# 行が1行あるだけで、tolerant パース（fromjson? // empty）は通過してしまい、後段の
+# group_by(.id)/map(last) 等が数値に対してオブジェクトのフィールドを参照しようとして
+# jq 型エラーで失敗 → `|| echo '[]'` により正常レコードまで含めてプール全体が空に化け、
+# lessons.md から正常レッスンが警告なしで全消失していた（実機確認済みの P0 バグ）。
+run_case "T14: 非 object の JSON 行（42 単体）が混入していても、正常レッスンは lessons.md に残存し malformed 警告が出る"
+
+T14_REPO="$(make_isolated_repo)"
+T14_KNOWLEDGE="$T14_REPO/.iterate-team/knowledge"
+mkdir -p "$T14_KNOWLEDGE"
+T14_JSONL="$T14_KNOWLEDGE/lessons.jsonl"
+
+make_record "L-t14-a" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-planner"]' "valid lesson a" > "$T14_JSONL"
+echo '42' >> "$T14_JSONL"
+make_record "L-t14-b" "high" "0" "2026-07-02T00:00:00Z" "active" '["team-planner"]' "valid lesson b" >> "$T14_JSONL"
+
+set +e
+T14_STDERR=$(CLAUDE_PROJECT_DIR="$T14_REPO" bash "$TARGET" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+T14_MD="$T14_KNOWLEDGE/lessons.md"
+assert_eq "exit code 0（非 object 行があっても異常終了しない）" "0" "$exit_code"
+T14_CONTENT="$(cat "$T14_MD" 2>/dev/null || true)"
+assert_contains "正常な1件目(L-t14-a)は掲載される" "L-t14-a" "$T14_CONTENT"
+assert_contains "正常な2件目(L-t14-b)は掲載される" "L-t14-b" "$T14_CONTENT"
+assert_contains "stderr に malformed line 警告が出力される（非 object 行も同じ malformed カウントに含まれる）" "malformed line" "$T14_STDERR"
+
+rm -rf "$T14_REPO"
+
+# ========== T15 [修正5 回帰] merge=union による物理行順の破壊への耐性（新しい ts 勝ち） ==========
+# .gitattributes の `lessons.jsonl merge=union` はブランチ統合時に同一 id の物理行順を
+# 保証しない。そのため「新しい ts のレコードが物理的に先、古い ts が後」という
+# merge=union 再現の並びを直接組み立て、digest が「物理最終行」ではなく「最新 ts」を
+# 採用することを検証する。
+run_case "T15: 同一 id で新しい ts のレコードが物理的に先・古い ts が後（merge=union 再現）でも digest は新しい ts 側を採用する"
+
+T15_REPO="$(make_isolated_repo)"
+T15_KNOWLEDGE="$T15_REPO/.iterate-team/knowledge"
+mkdir -p "$T15_KNOWLEDGE"
+T15_JSONL="$T15_KNOWLEDGE/lessons.jsonl"
+
+# 物理的に先: ts が新しい（2026-06-01）。物理的に後: ts が古い（2026-01-05）。
+make_record "L-t15-dup" "high" "0" "2026-06-01T00:00:00Z" "active" '["team-planner"]' "newer-ts-lesson-physically-first" > "$T15_JSONL"
+make_record "L-t15-dup" "high" "0" "2026-01-05T00:00:00Z" "active" '["team-planner"]' "older-ts-lesson-physically-last" >> "$T15_JSONL"
+
+set +e
+CLAUDE_PROJECT_DIR="$T15_REPO" bash "$TARGET" >/dev/null 2>&1
+exit_code=$?
+set -e
+
+T15_MD="$T15_KNOWLEDGE/lessons.md"
+assert_eq "exit code 0" "0" "$exit_code"
+T15_CONTENT="$(cat "$T15_MD" 2>/dev/null || true)"
+assert_contains "新しい ts 側のレッスン本文が採用される" "newer-ts-lesson-physically-first" "$T15_CONTENT"
+assert_not_contains "古い ts 側のレッスン本文（物理最終行）は採用されない" "older-ts-lesson-physically-last" "$T15_CONTENT"
+
+rm -rf "$T15_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

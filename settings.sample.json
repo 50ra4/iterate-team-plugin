@@ -56,6 +56,9 @@
       "Bash(<PLUGIN_ROOT>/scripts/knowledge-append.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/knowledge-digest.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/knowledge-prune.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-recover.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/retrospect-list-sessions.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/runlog-tail.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",
@@ -69,30 +72,32 @@
       "Bash(git status --porcelain*)",
       "Bash(git switch -c claude/*)",
       "Bash(git switch -c \"claude/*)",
+      // /iterate-retrospect の元ブランチ復帰用。引用符で始まる引数のみ許可することで、
+      // git switch -f / -C / --discard-changes 等の未コミット変更を破棄しうるフラグ形
+      // （非引用）を allowlist から構造的に除外する。コマンド側（iterate-retrospect.md）も
+      // 二重引用符付きの git switch "<original-branch>" を規定する。
+      "Bash(git switch \"*)",
       "Bash(git branch -m claude/*)",
       "Bash(git branch -m \"claude/*)",
+      // /iterate-retrospect fail-open（deep レトロでコミット0件）時の retro ブランチ削除用。
+      // 対象を knowledge-retrospect ブランチに限定する。
+      "Bash(git branch -D claude/knowledge-retrospect-*)",
+      "Bash(git branch -D \"claude/knowledge-retrospect-*)",
       "Bash(git log -1 --format=*)",
       "Bash(git log --grep=Refs:*)",
       "Bash(git log --grep=\"Refs:*)",
-      "Bash(git restore --staged --worktree -- .iterate-team/knowledge/)",
-      "Bash(git restore --staged --worktree -- .iterate-team/knowledge/*)",
 
       // (4) ハーネス状態の書き込み（対象リポ直下 .iterate-team/state/ 配下）
       "Write(.iterate-team/state/*/**)",
       "Edit(.iterate-team/state/*/**)",
-      // 6.7 fail-open の退避用（レトロスペクティブ失敗時に untracked な knowledge 生成物を
-      // .iterate-team/state/<session-id>/failed-retrospective/ へ退避する）。
-      // 退避は git status --porcelain の ?? 出力に列挙されたパスを1件ずつ mv すること
-      // （シェルグロブ mv .iterate-team/knowledge/* はドットファイルを取りこぼすため使わない）。
+      // preflight / retro セッションディレクトリの作成用（knowledge-recover.sh の呼び出し自体には
+      // 不要。6.7 fail-open の untracked 退避は knowledge-recover.sh 内部で完結する）。
       "Bash(mkdir -p .iterate-team/state/*)",
-      "Bash(mv .iterate-team/knowledge/* .iterate-team/state/*)",
-      // ドットファイル（.gitattributes 等）の退避用の変種。上記グロブは "." で始まる
-      // ファイルにマッチしないため、明示的に別パターンでカバーする。
-      "Bash(mv .iterate-team/knowledge/.* .iterate-team/state/*)",
 
       // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
-      "Write(.iterate-team/knowledge/**)",
-      "Edit(.iterate-team/knowledge/**)"
+      // Edit は付与しない: knowledge-policy.md が lessons.jsonl / lessons.md の直接編集を禁止し、
+      // team-retrospector の tools にも Edit は含まれない（proposals/INDEX.md への Write のみ使う）。
+      "Write(.iterate-team/knowledge/**)"
     ],
     "deny": [
       // push 経路の防御: 直接 git push の主要な破壊的形態を deny する。
