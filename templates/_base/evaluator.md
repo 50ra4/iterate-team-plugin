@@ -12,6 +12,7 @@ maxTurns: 25
 ## 必須遵守事項
 
 <!-- @ref _partials/universal-rules.md -->
+<!-- @ref _partials/knowledge-injection.md -->
 
 ## 入力
 

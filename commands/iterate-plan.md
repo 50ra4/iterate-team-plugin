@@ -15,6 +15,7 @@ argument-hint: [--from-branch <branch>] [--model <id>] [--resume <path>] [--resu
 
 - subagent_type には `team-` prefix を付ける
 - **`<plugin_root>` 解決**: SessionStart hook が注入する `<session-init>` の `plugin_root`（= init.json の plugin_root）を `<plugin_root>` として保持し、本文・operations・scripts 参照（`<plugin_root>/...`）の解決と、全 subagent 起動プロンプトへの `plugin_root=<絶対パス>` 注入に使う。ランタイム状態は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/`
+- **`knowledge_digest_path` 注入**: ステップ 0.0 で保持した `<knowledge_digest_path>`（`.iterate-team/knowledge/lessons.md` 絶対パス）を、本コマンドが起動する注入対象 agent（`team-interviewer` / `team-planner`）の起動プロンプトに `knowledge_digest_path=<絶対パス>` として必ず含める（`plugin_root` 注入と同じ規約）。interviewer / planner の戻り値の `適用レッスン:` 行は Orchestrator が代理記録する（正本: harness-common）。詳細・正本は [`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`](<plugin_root>/operations/harness-common.md#knowledge-ダイジェスト注入全コマンド共通) を参照
 - **メイン worktree の `task-x_y_z.md` 本文を Read しない**
 - 並列度上限 `team_max_parallel = 4`
 

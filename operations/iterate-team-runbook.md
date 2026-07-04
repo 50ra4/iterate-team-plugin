@@ -24,6 +24,7 @@
 | 4 / 4.5 承認（通算 1 回） | ステップ 4 は提示のみ → 4.5.A で Draft PR 作成 + PR URL で承認（唯一の承認） | ステップ 4 で承認済み → 4.5.B は push/PR skip + 承認なしで wave へ直行 |
 | 6.5 自己改善ループ        | 実行（`/simplify` + `/security-review`、push なし）                          | 実行（同上）                                                           |
 | 6.6 実装後 push           | 実行                                                                         | skip                                                                   |
+| 6.7 軽量レトロ            | 実行（commit + push）                                                       | 実行（commit のみ、fail-open）                                        |
 | 7 PR Ready 化             | 実行                                                                         | skip                                                                   |
 | 7' dev container 完了案内 | skip                                                                         | 実行（host 側で `git push -u origin <branch>` + 手動 PR 作成を促す）   |
 
@@ -35,7 +36,7 @@ PR 作成 / 本文更新 / Ready 化は Orchestrator が実行環境で利用可
 
 ## 主要 runlog イベント（早見）
 
-`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `escalated`
+`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `retrospective_started` / `retrospective_completed` / `retrospective_failed`（ステップ 6.7 fail-open） / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` / `escalated`
 
 各イベントの payload 仕様は `<plugin_root>/commands/iterate-team.md` の各ステップ記述、または `<plugin_root>/scripts/runlog-append.sh` の呼び出し箇所を参照。`agent_decision` イベントの抽出:
 
@@ -64,8 +65,9 @@ team の全発火点に加えて、以下を定める:
 | ステップ 6.5.2 `/security-review` 起動      | `skill-security-review` | `invoked`  | 「self-improvement round=<N>」                           |
 | ステップ 6.5.4 ループ超過                   | `skill-simplify`        | `rejected` | 「self_improve_round > 2」                               |
 | ステップ 6.6 push skip（dev container）     | `team-publisher`        | `skipped`  | 「dev container のため post_implementation push skip」   |
+| ステップ 6.7 起動時                          | `team-retrospector`     | `invoked`  | 「軽量レトロスペクティブ（mode=light）」                 |
 
-スキーマ詳細（キー定義 / decision 値域）は `agent-decision-schema.md` を参照。
+スキーマ詳細（キー定義 / decision 値域）は `agent-decision-schema.md` を参照。`retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` は `agent_decision` とは別の event 種別であり、詳細は `knowledge-policy.md` §10 を参照。
 
 ## `--model <model-id>` 引数の影響範囲
 
@@ -163,6 +165,7 @@ runlog: .iterate-team/state/<session-id>/runlog.jsonl
 | 6        | closer 委譲（`harness-common.md` の closer 章を参照）                                                                              |
 | 6.5      | [ステップ 6.5: 自己改善ループ（Skill: /simplify → /security-review）](#ステップ-65-自己改善ループskill-simplify--security-review)  |
 | 6.6      | [ステップ 6.6: 実装コミット群を remote へ push（host 環境のみ）](#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ)        |
+| 6.7      | [ステップ 6.7: 軽量レトロスペクティブ](#ステップ-67-軽量レトロスペクティブ)                                                        |
 | 7        | [ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）](#ステップ-7-pr-ready-化とユーザーへ一括報告host-環境のみ)           |
 | 7'       | [ステップ 7': dev container 専用 — ローカル完了報告と引き継ぎ案内](#ステップ-7-dev-container-専用--ローカル完了報告と引き継ぎ案内) |
 
@@ -177,6 +180,7 @@ integration-branch: <integration-branch>
 試行回数累計: <total_attempts>
 コミット履歴: git log --grep="Refs: task-" --format="%h %s"
 PR URL: <pr-url>（host 環境のみ）
+記録レッスン数: <lessons_recorded> / プラグイン改善提案: <proposals_recorded>件
 runlog: .iterate-team/state/<session-id>/runlog.jsonl
 ```
 
@@ -227,7 +231,7 @@ session-id 形式は先頭英数字を必須とし（`-flag` 始まりの引数�
 | コマンド          | 担当 `next_step` 値域（文字列・またはその数値相当）                                                               |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `/iterate-build`  | `"4.5"` / `"5"` / `"5.0"` / `"5.1"` / `"5.2"` / `"5.3"` / `"5.4"` / `"5.5"` / `"5.6"` / `"5.7"`（数値表現も許容） |
-| `/iterate-review` | `"6"` / `"6.5"` / `"6.6"` / `"7"` / `"7'"`（数値表現も許容）                                                      |
+| `/iterate-review` | `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"`（数値表現も許容）                                            |
 
 範囲外の場合のエラーメッセージ形式:
 
@@ -262,7 +266,7 @@ session-id 形式は先頭英数字を必須とし（`-flag` 始まりの引数�
 | ------------------------------------------------------------------------------------------------------------------ | ----------------- | -------------------------------------------------------------------------- |
 | `"2.5"` / `"3"` / `"3.2"` / `"3.5"` / `"3.5-replan"` / `"4"` またはその数値相当                                    | `/iterate-plan`   | 担当外: 処理中止 + `/iterate-plan --resume-checkpoint <session-id>` を案内 |
 | `"4.5"` / `"5"` / `"5.0"` / `"5.1"` / `"5.2"` / `"5.3"` / `"5.4"` / `"5.5"` / `"5.6"` / `"5.7"` またはその数値相当 | `/iterate-build`  | 担当内: 該当ステップから再開                                               |
-| `"6"` / `"6.5"` / `"6.6"` / `"7"` / `"7'"` またはその数値相当                                                      | `/iterate-review` | 担当内: 該当ステップから再開                                               |
+| `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"` またはその数値相当                                            | `/iterate-review` | 担当内: 該当ステップから再開                                               |
 | 上記以外（未知値）                                                                                                 | —                 | abort + 「未知の next_step 値: <value>」エラーを返して処理中止             |
 
 担当外の場合の処理中止メッセージ形式:
@@ -780,6 +784,63 @@ escalation.md には `<security_blockers>` 応答パスと各ラウンド sha �
 
 push しないと Ready PR が GitHub 上で計画コミットだけを指し、wave merge / Generator 実装 / closer チェックリスト一括コミット / 自己改善コミット群がレビュー対象に載らない。push 失敗時はステップ 9。
 
+**ステップ 6.6 完了 `step_checkpoint`**（skip 経路（dev container）も含め両分岐で追記する）: `next_step` は **`"6.7"`**（軽量レトロスペクティブへ）とする。
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" step_checkpoint '{"step":"6.6","topic_slug":"<topic-slug>","plan_revision":<rev>,"integration_branch":"<integration-branch>","current_task_id":null,"current_attempt":null,"completed_task_ids":[...],"wave_index":null,"completed_wave_indices":[...],"advisor_pending":false,"next_step":"6.7"}'
+```
+
+### ステップ 6.7: 軽量レトロスペクティブ
+
+ステップ 6.6 完了後、ステップ 7（PR Ready 化）の前に `team-retrospector` を `mode=light` で起動し、当該セッションの `runlog.jsonl` から教訓（lesson）を抽出して `.iterate-team/knowledge/` へ永続化する。knowledge への書き込み主体は `team-retrospector` のみに限定される（`knowledge-policy.md` §1）。本ステップは **fail-open** であり、失敗してもステップ 9（エスカレーション）へ遷移せずステップ 7 へ続行する、ハーネス唯一のステップである。
+
+#### 6.7.1 起動
+
+1. runlog `retrospective_started` / `{"mode":"light"}` を追記
+2. `<plugin_root>/scripts/runlog-agent-decision.sh "<session-id>" team-retrospector invoked "軽量レトロスペクティブ（mode=light）"` を追記
+3. `Agent subagent_type: team-retrospector` を起動。プロンプトキー:
+   - `plugin_root`（絶対パス）
+   - `session_id`
+   - `state_root`（`.iterate-team/state/<session-id>` 絶対パス）
+   - `knowledge_dir`（`<repo-root>/.iterate-team/knowledge` 絶対パス）
+   - `tasks_dir`（当該トピックのタスクディレクトリ絶対パス）
+   - `topic_slug`
+   - `mode=light`
+
+#### 6.7.2 戻り値検証とコミット
+
+1. 戻り値 JSON フェンス（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を検証する。parse 失敗・必須キー欠落は 6.7.5 の fail-open へ
+2. `Bash git status --porcelain -- .iterate-team/knowledge/` で差分を確認する。差分なし（教訓抽出なし）の場合はコミットをスキップし 6.7.4 の runlog 記録へ進む（`lessons_recorded:0, proposals_recorded:0`）
+3. 差分あり: **個別 `git add`**（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` 配下の各ファイルを 1 件ずつ。`lessons.md` は git 管理外のため対象外。`git add -A` / `git add .` 禁止）
+4. 1 コミットにまとめる。subject `docs: セッションレトロスペクティブ知見を記録`、フッタ `Refs: retrospective-<session-id>`
+5. コミット失敗（pre-commit hook reject 等、exit 非 0）は 6.7.5 の fail-open へ
+
+#### 6.7.3 push 分岐（host / dev container）
+
+- **`<is_dev_container>=false`（host）**: ステップ 6.6 で起動した `team-publisher`（`push_branch` / `post_implementation`）と同じ規約で、本ステップのコミットを含めて統合ブランチ全体を 2 回目 push する。push 失敗時は knowledge コミット自体は成功しているため fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する
+- **`<is_dev_container>=true`（dev container）**: push は skip する。本コミットはステップ 7' の手動 push 案内（`git push -u origin <integration-branch>`）に自動的に含まれる
+
+#### 6.7.4 runlog 記録と checkpoint
+
+1. runlog `retrospective_completed` / `{"mode":"light","lessons_recorded":N,"proposals_recorded":M}` を追記（`N` = `new_lessons` と `updated_lessons` の合計件数、`M` = `proposals` の件数）
+2. `step_checkpoint` を追記:
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" step_checkpoint '{"step":"6.7","topic_slug":"<topic-slug>","plan_revision":<rev>,"integration_branch":"<integration-branch>","current_task_id":null,"current_attempt":null,"completed_task_ids":[...],"wave_index":null,"completed_wave_indices":[...],"advisor_pending":false,"next_step":"7"}'
+```
+
+3. ステップ 7 へ進む
+
+#### 6.7.5 fail-open
+
+`team-retrospector` の起動失敗 / 戻り値 JSON parse 失敗・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合:
+
+1. `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは (a) staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、(b) 残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を git 除外領域の `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合はその退避先の相対パスを stdout に1行出力する。clean 化に成功すれば exit 0、失敗時は stderr に診断を出して exit 1 を返す
+2. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>","evacuated_to":"<手順1のスクリプト stdout。出力があった場合のみ含める>"}` を追記する。手順1のスクリプトが exit 非 0 で終了した場合も、その旨を `reason` に含めて記録の上で続行する（fail-open は維持する）
+3. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
+
+push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する（6.7.3 参照）。
+
 ### ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
 `<is_dev_container>=true` の場合、本ステップを skip してステップ 7' へ（runlog: `ready_skipped` + `agent_decision team-publisher skipped`）。
@@ -788,7 +849,7 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 1. Orchestrator が実行環境で利用可能な手段で `<pr-number>` の Draft 状態を解除（Ready 化）
 2. runlog: `pr_marked_ready` / `{pr_number}`
-3. 結論ファーストで報告: 完了タスク数 / 試行回数累計 / コミット一覧（`git log --grep="Refs: task-" --format="%h %s"`）/ PR URL / 残作業 / runlog.jsonl パス
+3. 結論ファーストで報告: 完了タスク数 / 試行回数累計 / コミット一覧（`git log --grep="Refs: task-" --format="%h %s"`）/ PR URL / 記録レッスン数・プラグイン改善提案の有無（ステップ 6.7 の `retrospective_completed` payload から） / 残作業 / runlog.jsonl パス
 
 ### ステップ 7': dev container 専用 — ローカル完了報告と引き継ぎ案内
 
@@ -872,6 +933,7 @@ runlog: `dev_container_complete` / `{integration_branch, total_tasks, total_atte
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<model_override>`             | ステップ 1.0 で `--model <id>` 検出時のみ                                                                                                                                                                                                                                                 | session_start / agent_decision / runtime_detected payload に反映                                                                                                                                                                          |
 | `<is_dev_container>`           | ステップ 0.0 で SessionStart hook の init.json から取得                                                                                                                                                                                                                                   | Codex 可用性判定 / ステップ 4.5 / 6.6 / 7 / 7' の分岐                                                                                                                                                                                     |
+| `<knowledge_digest_path>`      | ステップ 0.0 で `<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パスとして設定（ファイル不在でも保持）                                                                                                                                                                             | `team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder` の起動プロンプトへの `knowledge_digest_path` 注入。Bash を持たない `team-planner` / `team-interviewer` が `適用レッスン:` 行で報告した場合は Orchestrator が `lesson_applied` を代理記録する（`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`）                          |
 | `<integration-branch>`         | ステップ 0.1 で placeholder ブランチ作成時に設定、ステップ 3.x で `claude/<topic-slug>` に rename                                                                                                                                                                                         | worktree base / push / PR head として使用                                                                                                                                                                                                 |
 | `<from_branch>`                | ステップ 0.1 (3.0) で `--from-branch <branch>`（既定 `main`）から設定。ステップ 4 checkpoint に永続化し resume / `/iterate-build` で復元                                                                                                                                                  | placeholder ブランチの派生元（`origin/<from_branch>`） / Draft PR の base（4.5.A.3）                                                                                                                                                      |
 | `<plan_approved>`              | ステップ 4 完了時に設定（dev container=承認済み true / host=提示のみ false）。checkpoint に永続化                                                                                                                                                                                         | ステップ 4.5 の承認要否分岐（二重承認防止）                                                                                                                                                                                               |

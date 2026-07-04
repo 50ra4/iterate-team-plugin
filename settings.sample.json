@@ -44,6 +44,7 @@
 
       // (2) ハーネス補助スクリプト（<PLUGIN_ROOT> を実体パスへ置換すること）
       "Bash(<PLUGIN_ROOT>/scripts/runlog-append.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/runlog-agent-decision.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/iterate-validate-session.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/validate-plan.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-compute-waves.sh *)",
@@ -52,6 +53,21 @@
       "Bash(<PLUGIN_ROOT>/scripts/team-worktree-merge.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-worktree-cleanup.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/team-push-branch.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-append.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-digest.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-prune.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/knowledge-recover.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/retrospect-list-sessions.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/runlog-tail.sh *)",
+      // /iterate-retrospect の元ブランチ復帰・失敗時のブランチ削除用。引数検証つきラッパー
+      // (git-switch-branch.sh は先頭 `-` 引数拒否 + `git check-ref-format --branch` 検証の上で
+      // `git switch <branch>` を実行し、`git switch "--discard-changes" <branch>` のような
+      // 引用符トリック（シェルが引用符を除去し非引用フラグとして素通しする）を防ぐ。
+      // retrospect-delete-branch.sh は対象名が `^claude/knowledge-retrospect-[A-Za-z0-9._-]+$`
+      // に完全一致する場合のみ `git branch -D` を実行し、`git branch -D <retro> main` のような
+      // 末尾ワイルドカードが許す余剰引数注入を防ぐ）
+      "Bash(<PLUGIN_ROOT>/scripts/git-switch-branch.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/retrospect-delete-branch.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",
@@ -62,7 +78,7 @@
       "Bash(git rev-parse --verify *)",
       "Bash(git rev-parse --verify \"*)",
       "Bash(git fetch origin main)",
-      "Bash(git status --porcelain)",
+      "Bash(git status --porcelain*)",
       "Bash(git switch -c claude/*)",
       "Bash(git switch -c \"claude/*)",
       "Bash(git branch -m claude/*)",
@@ -73,7 +89,15 @@
 
       // (4) ハーネス状態の書き込み（対象リポ直下 .iterate-team/state/ 配下）
       "Write(.iterate-team/state/*/**)",
-      "Edit(.iterate-team/state/*/**)"
+      "Edit(.iterate-team/state/*/**)",
+      // preflight / retro セッションディレクトリの作成用（knowledge-recover.sh の呼び出し自体には
+      // 不要。6.7 fail-open の untracked 退避は knowledge-recover.sh 内部で完結する）。
+      "Bash(mkdir -p .iterate-team/state/*)",
+
+      // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
+      // Edit は付与しない: knowledge-policy.md が lessons.jsonl / lessons.md の直接編集を禁止し、
+      // team-retrospector の tools にも Edit は含まれない（proposals/INDEX.md への Write のみ使う）。
+      "Write(.iterate-team/knowledge/**)"
     ],
     "deny": [
       // push 経路の防御: 直接 git push の主要な破壊的形態を deny する。

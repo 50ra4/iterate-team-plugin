@@ -25,7 +25,7 @@ iterate-team は **agent team（並列実行）ハーネス**であり、4 軸�
 
 正規 session-id 発行前に **preflight session-id** `team_<YYYYMMDDHHmm>_preflight` を発行し本ステップの runlog 宛先を確保する（`mkdir -p .iterate-team/state/<preflight-session-id>`）。
 
-- **0.0 セッション初期化結果の取得**: SessionStart hook が注入した `<session-init>` タグ（`init_path` / `is_dev_container` / `mcp_profile` / `model` / `plugin_root`）を context 先頭から取得。**存在しない**場合は処理中止メッセージを返す。`init_path` を `Read` で開き init.json 内容を in-memory フラグとして保持。**`plugin_root` を `<plugin_root>` として保持**（以降の `<plugin_root>/...` 参照解決と subagent プロンプトへの注入に使用）。**Bash で `CLAUDE_CONFIG_DIR` を再判定しない**（hook 確定済）。runlog `runtime_detected` 追記
+- **0.0 セッション初期化結果の取得**: SessionStart hook が注入した `<session-init>` タグ（`init_path` / `is_dev_container` / `mcp_profile` / `model` / `plugin_root`）を context 先頭から取得。**存在しない**場合は処理中止メッセージを返す。`init_path` を `Read` で開き init.json 内容を in-memory フラグとして保持。**`plugin_root` を `<plugin_root>` として保持**（以降の `<plugin_root>/...` 参照解決と subagent プロンプトへの注入に使用）。**`<knowledge_digest_path>` を保持**（`<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パス。ファイル不在でもパスは保持し、注入対象 agent 側が黙って skip する規約）。注入対象 5 agent（`team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder`）の起動プロンプトに `knowledge_digest_path=<絶対パス>` を必ず含める（`plugin_root` 注入と同じ規約。詳細は [`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`](<plugin_root>/operations/harness-common.md#knowledge-ダイジェスト注入全コマンド共通)）。Bash を持たない `team-planner` / `team-interviewer` の戻り値の `適用レッスン:` 行は Orchestrator が代理記録する（手順の正本は harness-common）。**Bash で `CLAUDE_CONFIG_DIR` を再判定しない**（hook 確定済）。runlog `runtime_detected` 追記
 - **0.1 origin/main の fetch + 作業ブランチ bootstrap**:
   1. **経路判定**: `--resume-checkpoint <session-id>` 引数の有無で分岐
   2. **`--resume-checkpoint <session-id>` 経路**: 既存ブランチを再利用するため fetch / bootstrap / rename **すべて skip**。HEAD 整合検証 (c) が `step_checkpoint` payload に依存するため、**payload 復元をステップ 1.3 から本ステップ冒頭へ前倒しする**（順序保証: payload 未復元の状態で (c) を評価すると `integration_branch` キーを参照できず、誤った `claude/*` ブランチで resume するケースを検出できない）。手順:
@@ -177,13 +177,27 @@ closer 完了後、push 前に `<integration-branch>` 上で自己改善ルー�
 
 ## ステップ 6.6: 実装コミット群を remote へ push（host 環境のみ）【iterate-team 新規】
 
-`<is_dev_container>=true` → skip（runlog `post_push_skipped`）。`<is_dev_container>=false` → `Agent team-publisher`（`push_branch` / `post_implementation`）で統合ブランチ全体を push。
+`<is_dev_container>=true` → skip（runlog `post_push_skipped`）。`<is_dev_container>=false` → `Agent team-publisher`（`push_branch` / `post_implementation`）で統合ブランチ全体を push。両分岐とも完了直後に `step_checkpoint`（`next_step:"6.7"`）を追記し、ステップ 6.7 へ進む。
 
 詳細: [`iterate-team-runbook.md#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ)
 
+## ステップ 6.7: 軽量レトロスペクティブ（team-retrospector）【iterate-team 新規】
+
+ステップ 6.6 完了後、ステップ 7（PR Ready 化）の前に `team-retrospector`（`mode=light`）を起動し、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/` へ永続化する（確定値の正本: `knowledge-policy.md`）。knowledge への書き込み主体は本ステップと `/iterate-retrospect` の team-retrospector のみに限定される。
+
+1. runlog `retrospective_started`（detail: `{"mode":"light"}`）を追記 → `<plugin_root>/scripts/runlog-agent-decision.sh` で `team-retrospector` の `invoked` を追記
+2. `Agent subagent_type: team-retrospector` を起動。プロンプトキー: `plugin_root` / `session_id` / `state_root` / `knowledge_dir`（`<repo-root>/.iterate-team/knowledge` 絶対パス）/ `tasks_dir` / `topic_slug` / `mode=light`
+3. 戻り値 JSON（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を検証 → `Bash git status --porcelain -- .iterate-team/knowledge/` で差分確認 → 差分があれば**個別 `git add`**（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` 配下の各ファイル。`lessons.md` は git 管理外のため対象外。`git add -A` / `git add .` 禁止）→ 1 コミットにまとめる。subject `docs: セッションレトロスペクティブ知見を記録`、フッタ `Refs: retrospective-<session-id>`
+4. `<is_dev_container>=false`（host）: `team-publisher` による 2 回目 push（ステップ 6.6 と同じ規約）に本コミットを含める。`<is_dev_container>=true`（dev container）: push は skip（ステップ 7' の手動 push 案内に本コミットも含めて案内される）
+5. runlog `retrospective_completed`（detail: `{"mode":"light","lessons_recorded":N,"proposals_recorded":M}`。`N` = `new_lessons` と `updated_lessons` の合計件数、`M` = `proposals` の件数。定義は runbook 6.7.4 と同一）を追記 → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ進む
+
+**fail-open 規定**: team-retrospector の起動失敗 / 戻り値 JSON 不正・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合、以下の手順で復旧する（詳細な手順の正本は runbook 6.7.5）: 1) `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは `.iterate-team/knowledge/` の staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す。2) runlog `retrospective_failed`（detail: `{"mode":"light","reason":"...","evacuated_to":"..."}`。`evacuated_to` は手順1のスクリプトが退避先を出力した場合のみ含める。スクリプトが exit 非 0 の場合もその旨を reason に含めて記録の上で続行する）を追記して**ステップ 7 へ続行する**。本ステップはハーネス全体の中で**唯一、失敗してもステップ 9（エスカレーション）へ遷移しない**ステップである（knowledge 記録の失敗で PR 完了を阻害しないため）。push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する。
+
+詳細: [`iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ)
+
 ## ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
-`<is_dev_container>=true` → skip してステップ 7' へ（runlog `ready_skipped`）。`<is_dev_container>=false` → Draft 解除（Ready 化）→ runlog `pr_marked_ready` → 完了タスク数 / 試行回数 / PR URL を報告。
+`<is_dev_container>=true` → skip してステップ 7' へ（runlog `ready_skipped`）。`<is_dev_container>=false` → Draft 解除（Ready 化）→ runlog `pr_marked_ready` → 完了タスク数 / 試行回数 / PR URL / 記録レッスン数・プラグイン改善提案の有無を報告。
 
 ## ステップ 7': dev container 専用 — ローカル完了報告と引き継ぎ案内
 
@@ -223,6 +237,9 @@ closer 完了後、push 前に `<integration-branch>` 上で自己改善ルー�
 - `--resume-checkpoint` 経路は `claude/<...>` ブランチ上のみ許可（HEAD 整合 3 段階検証）
 - `/simplify` / `/security-review`（ステップ 6.5 自己改善ループ）は Orchestrator メインセッションが `Skill` ツール経由で呼び出す（team-\* subagent は非付与）。例外として **`team-refactor` は `tools: Skill` を付与**され、per-task の refactor 局面（5.2.5）で `/simplify` / `/code-review` を起動する
 - **TDD（テストファースト）**: `reviewer: codex` のタスクは 5.1.5 で `team-test-coder` が Red（test）→ フェーズ B で `team-generator` が Green（impl）→ 5.2.5 で `team-refactor` が整理（refactor）の順に実行。1 タスクで test/impl/refactor の複数コミット可（すべて `Refs: task-x_y_z`）。`reviewer: none` は TDD 対象外。詳細は `tdd-policy.md`
+- **knowledge への書き込みはステップ 6.7 と `/iterate-retrospect` のみ**（他ステップで書くと tracked ファイルの dirty 化により後続 git 操作を汚染するため禁止）
+- **ステップ 6.7 は fail-open**（agent 失敗・戻り値不正・コミット失敗のいずれでもステップ 9 へ遷移せずステップ 7 へ続行する、ハーネス唯一のステップ）
+- light モード（ステップ 6.7）の記録上限（新規レッスン最大 3 件・プラグイン改善提案最大 1 件）は `knowledge-policy.md` §5 を正本とする
 
 状態保持変数の用途と初期化タイミングは [`iterate-team-runbook.md#orchestrator-状態保持変数team`](<plugin_root>/operations/iterate-team-runbook.md#orchestrator-状態保持変数team) を参照。
 

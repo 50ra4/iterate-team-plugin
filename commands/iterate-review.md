@@ -41,7 +41,7 @@ Usage: /iterate-review --session <session-id> [--model <id>] [--resume-checkpoin
 
 ### `--resume-checkpoint <session-id>` 引数の処理
 
-`--resume-checkpoint <session-id>` で起動された場合、checkpoint payload の `next_step` を確認する。担当範囲の判定は数値・文字列双方を許容して行い（後方互換: 旧 runlog は数値で書き込まれている場合がある）、[`iterate-team-runbook.md` の分岐表](<plugin_root>/operations/iterate-team-runbook.md#next_step-値域と担当コマンドの分岐表)を SSOT とする。文字列専用識別子（`"3.5-replan"` 等）は数値表現が存在しないため文字列照合を維持する。本コマンド担当値（`6` / `"6"` / `"6.5"` / `"6.6"` / `"7"` / `"7'"`）以外のとき、処理中止し担当コマンドを案内する:
+`--resume-checkpoint <session-id>` で起動された場合、checkpoint payload の `next_step` を確認する。担当範囲の判定は数値・文字列双方を許容して行い（後方互換: 旧 runlog は数値で書き込まれている場合がある）、[`iterate-team-runbook.md` の分岐表](<plugin_root>/operations/iterate-team-runbook.md#next_step-値域と担当コマンドの分岐表)を SSOT とする。文字列専用識別子（`"3.5-replan"` 等）は数値表現が存在しないため文字列照合を維持する。本コマンド担当値（`6` / `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"`）以外のとき、処理中止し担当コマンドを案内する（`"6.7"` 追加前の旧 checkpoint は `next_step:"7"` のまま記録されているため、旧 checkpoint からの resume も従来どおり本コマンド担当範囲として扱われ後方互換を維持する）:
 
 - `next_step` が `/iterate-plan` 担当値（`"2.5"` / `"3"` / `"3.2"` / `"3.5"` / `"3.5-replan"` / `"4"`）:
 
@@ -143,13 +143,29 @@ blocker が無ければステップ 6.6 へ。blocker があれば `self_improve
 
 `<is_dev_container>=false` の場合のみ、`Agent subagent_type: team-publisher` を operation `push_branch`、phase `post_implementation` で起動し統合ブランチ全体を push する。
 
+両分岐とも完了直後に `step_checkpoint`（`next_step:"6.7"`）を追記し、ステップ 6.7 へ進む。
+
 詳細: [`iterate-team-runbook.md#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ)
+
+## ステップ 6.7: 軽量レトロスペクティブ（team-retrospector）
+
+ステップ 6.6 完了後、ステップ 7（PR Ready 化）の前に `team-retrospector`（`mode=light`）を起動し、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/` へ永続化する（確定値の正本: `knowledge-policy.md`）。knowledge への書き込み主体は本ステップと `/iterate-retrospect` の team-retrospector のみに限定される。
+
+1. runlog `retrospective_started`（detail: `{"mode":"light"}`）を追記 → `<plugin_root>/scripts/runlog-agent-decision.sh` で `team-retrospector` の `invoked` を追記
+2. `Agent subagent_type: team-retrospector` を起動。プロンプトキー: `plugin_root` / `session_id` / `state_root` / `knowledge_dir`（`<repo-root>/.iterate-team/knowledge` 絶対パス）/ `tasks_dir` / `topic_slug` / `mode=light`
+3. 戻り値 JSON（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を検証 → `Bash git status --porcelain -- .iterate-team/knowledge/` で差分確認 → 差分があれば**個別 `git add`**（`lessons.jsonl` / `.gitattributes` / `.gitignore` / `proposals/` 配下の各ファイル。`lessons.md` は git 管理外のため対象外。`git add -A` / `git add .` 禁止）→ 1 コミットにまとめる。subject `docs: セッションレトロスペクティブ知見を記録`、フッタ `Refs: retrospective-<session-id>`
+4. `<is_dev_container>=false`（host）: `team-publisher` による 2 回目 push（ステップ 6.6 と同じ規約）に本コミットを含める。`<is_dev_container>=true`（dev container）: push は skip（ステップ 7' の手動 push 案内に本コミットも含めて案内される）
+5. runlog `retrospective_completed`（detail: `{"mode":"light","lessons_recorded":N,"proposals_recorded":M}`。`N` = `new_lessons` と `updated_lessons` の合計件数、`M` = `proposals` の件数。定義は runbook 6.7.4 と同一）を追記 → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ進む
+
+**fail-open 規定**: team-retrospector の起動失敗 / 戻り値 JSON 不正・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合、以下の手順で復旧する（詳細な手順の正本は runbook 6.7.5）: 1) `Bash <plugin_root>/scripts/knowledge-recover.sh "<session-id>"` を実行する。スクリプトは `.iterate-team/knowledge/` の staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked / git 無視対象の生成物（`.gitattributes` 等のドットファイル、`.gitignore` により無視される `lessons.md` を含む）を `.iterate-team/state/<session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す。2) runlog `retrospective_failed`（detail: `{"mode":"light","reason":"...","evacuated_to":"..."}`。`evacuated_to` は手順1のスクリプトが退避先を出力した場合のみ含める。スクリプトが exit 非 0 の場合もその旨を reason に含めて記録の上で続行する）を追記して**ステップ 7 へ続行する**。本ステップはハーネス全体の中で**唯一、失敗してもステップ 9（エスカレーション）へ遷移しない**ステップである（knowledge 記録の失敗で PR 完了を阻害しないため）。push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する。
+
+詳細: [`iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ)
 
 ## ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
 `<is_dev_container>=true` の場合、本ステップを skip してステップ 7' へ（runlog `ready_skipped`）。
 
-`<is_dev_container>=false` の場合のみ、Draft PR を Ready 化し、完了タスク数 / 試行回数 / コミット一覧 / PR URL / runlog パスを結論ファーストで報告する。
+`<is_dev_container>=false` の場合のみ、Draft PR を Ready 化し、完了タスク数 / 試行回数 / コミット一覧 / PR URL / 記録レッスン数・プラグイン改善提案の有無 / runlog パスを結論ファーストで報告する。
 
 詳細: [`iterate-team-runbook.md#ステップ-7-pr-ready-化とユーザーへ一括報告host-環境のみ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-7-pr-ready-化とユーザーへ一括報告host-環境のみ)
 
@@ -165,6 +181,7 @@ blocker が無ければステップ 6.6 へ。blocker があれば `self_improve
 | ------------------------- | --------------------------------------------------- | ---------------- |
 | 6.5 自己改善ループ        | 実行（`/simplify` + `/security-review`、push なし） | 実行（同上）     |
 | 6.6 実装後 push           | 実行                                                | skip             |
+| 6.7 軽量レトロ            | 実行（commit + push）                               | 実行（commit のみ） |
 | 7 PR Ready 化             | 実行                                                | skip             |
 | 7' dev container 完了案内 | skip                                                | 実行             |
 

@@ -16,6 +16,36 @@
 > - **Draft PR の作成は同一 session 内で 1 回のみ**（修正フロー後の再走行時は同一 PR の本文を更新する）
 > - 並列度上限 `team_max_parallel = 4`（Sonnet rate-limit / I/O 競合 / Codex MCP 同時セッション安全側）
 
+## knowledge ダイジェスト注入（全コマンド共通）
+
+確定値の正本は [`knowledge-policy.md#7-注入規約`](./knowledge-policy.md#7-注入規約)。本節は Orchestrator 側の共通手順のみを扱う。
+
+Orchestrator はステップ 0.0（session-init 取得）で `<knowledge_digest_path>` = `<repo-root>/.iterate-team/knowledge/lessons.md` の絶対パスを in-memory 保持する。**ファイル不在でもパスは保持したまま進む**（存在チェックは行わない。注入対象 agent 側が `Read` 失敗時に黙って skip する規約のため）。`lessons.md` は git 管理外の生成物（`knowledge-policy.md` §2）であり、SessionStart hook が `lessons.jsonl` の存在時に再生成するため、通常セッションでは既に存在している（fresh clone 直後・並走セッションのマージ直後に生じうる不在・stale をこの hook 再生成が解消する）。knowledge 未導入リポジトリ等で `lessons.jsonl` 自体が無い場合は `lessons.md` も生成されず、その場合も従来どおり注入対象 agent 側が `Read` 失敗時に黙って skip する。
+
+注入対象は以下の 5 agent に限定する（prompt bloat 抑制）。
+
+- `team-planner`
+- `team-generator`
+- `team-evaluator`
+- `team-interviewer`
+- `team-test-coder`
+
+上記 5 agent の**すべての起動プロンプト**（初回起動・再起動・差し戻し起動を問わず）に `knowledge_digest_path=<絶対パス>` を、`plugin_root=<絶対パス>` と同じ注入規約で含める。それ以外の agent（`team-closer` / `team-refactor` / `team-advisor-*` / `team-publisher` / `team-reviewer-*` / Codex 系等）には注入しない。
+
+agent 側の適用規則（対象セクションの限定・タスク仕様との矛盾時の劣後・`lesson_applied` の記録条件）は [`templates/_partials/knowledge-injection.md`](../templates/_partials/knowledge-injection.md) を参照。
+
+**代理記録の義務**: 注入対象 5 agent のうち Bash を持たない agent（`team-planner` / `team-interviewer`）は `runlog-append.sh` による `lesson_applied` の自己記録ができない。これらの agent の戻り値に `適用レッスン: L-...` 行が含まれる場合、Orchestrator は各 `lesson_id` につき以下を実行して代理記録する。ただし、記録するのは `lesson_id` が形式 `L-<YYYYMMDDTHHmm>-<4hex>`（正規表現 `L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}`）に一致する場合のみとし、不一致の文字列は記録しない。agent の戻り値テキストは自由記述であり、形式不一致の文字列を `lesson_applied` として記録すると集計（`applied_count` 反映・減衰判定）を汚染するためである:
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" lesson_applied '{"lesson_id":"L-...","agent":"<agent名>","recorded_by":"orchestrator"}'
+```
+
+**二重記録の防止**: Bash を持つ agent（`team-generator` / `team-evaluator` / `team-test-coder`）は自己記録するため、これらの戻り値の `適用レッスン:` 行に対して Orchestrator は代理記録**しない**。
+
+規約の対は `templates/_partials/knowledge-injection.md` 規則3。値の正本は [`knowledge-policy.md#7-注入規約`](./knowledge-policy.md#7-注入規約)。
+
+> **team 固有**: knowledge への書き込み主体はステップ 6.7（軽量レトロスペクティブ）と `/iterate-retrospect`（deep レトロスペクティブ）の `team-retrospector` のみに限定される。詳細は `iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ` を参照。
+
 ## 引数
 
 要望文: `$ARGUMENTS`
