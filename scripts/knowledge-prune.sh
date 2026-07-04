@@ -20,6 +20,11 @@
 # ロックは git-tracked の knowledge/ を汚染しないよう state/ 配下に置く
 # （knowledge-append.sh と同一パスを共有して相互排他する）。
 #
+# TOCTOU 対策: 圧縮結果の算出（lessons.jsonl の jq 読み取り）はロック取得後に行う。
+# ロック取得より前に読み取ると、並走する knowledge-append.sh がその隙に追記した行が
+# --apply の mv で消失しうるため（PR レビュー指摘）。ロックは dry-run 表示 / --apply の
+# 書き込み・mv 完了までの一連の処理を通じて保持する。
+#
 # Exit code:
 #   0 = 正常終了（dry-run 完了 / --apply 完了）
 #   1 = 異常終了（lessons.jsonl 不在 / 引数不正 / path 検証失敗 等）
@@ -84,7 +89,54 @@ if [[ -z "$RESOLVED_LESSONS" || "$RESOLVED_LESSONS" != "$CANONICAL_KNOWLEDGE"/* 
   exit 1
 fi
 
-# ---- 圧縮結果の算出（dry-run / --apply 共通） ----
+# ---- ロック取得（jq 読み取りより前に取得し、dry-run 表示 / --apply の書き込み・mv
+#       完了までロックを保持する。TOCTOU 対策の要） ----
+# knowledge-append.sh の追記ロックと同一パスを奪い合う（append 中の書き換え衝突防止）。
+# ロックパスは git 除外領域の state/ 配下に置く（knowledge/ 内に .lock を残置すると
+# untracked 差分として git status を汚染し誤コミットのリスクがあるため）。
+lock_base_dir="${repo_root}/.iterate-team/state"
+mkdir -p "$lock_base_dir"
+
+# tmp_file・lock_dir は _cleanup から参照するため、ロック取得前に空文字で宣言しておく
+# （--apply 分岐に入らない dry-run や、mkdir フォールバック未使用時でも set -u で
+# 未定義変数エラーにならないようにする）。
+tmp_file=""
+lock_dir=""
+USE_FLOCK=false
+
+_cleanup() {
+  [[ -n "$tmp_file" && -f "$tmp_file" ]] && rm -f "$tmp_file"
+  if [[ "$USE_FLOCK" == true ]]; then
+    flock -u 9 2>/dev/null || true
+    exec 9>&- 2>/dev/null || true
+  elif [[ -n "$lock_dir" ]]; then
+    rmdir "$lock_dir" 2>/dev/null || true
+  fi
+}
+trap _cleanup EXIT
+
+if command -v flock >/dev/null 2>&1; then
+  USE_FLOCK=true
+  lock_file="${lock_base_dir}/knowledge-lessons.lock"
+  exec 9>>"$lock_file"
+  if ! flock -x -w 5 9; then
+    echo "flock timeout: $lessons_jsonl" >&2
+    exit 1
+  fi
+else
+  lock_dir="${lock_base_dir}/knowledge-lessons.lock.d"
+  waited=0
+  until mkdir "$lock_dir" 2>/dev/null; do
+    if [[ "$waited" -ge 50 ]]; then
+      echo "lock timeout: $lessons_jsonl" >&2
+      exit 1
+    fi
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+fi
+
+# ---- 圧縮結果の算出（ロック取得後。dry-run / --apply 共通） ----
 # group_by(.id) は id 昇順の安定ソートのため、各 id グループ内の相対順序は
 # 元ファイルの出現順のまま保たれる。
 #   .[0]  = 初回記録（first_ts の算出に使う）
@@ -119,7 +171,7 @@ removed_count="$(printf '%s' "$compact_summary" | jq '[.[] | select(.remove)] | 
 kept_count=$(( total_ids - removed_count ))
 
 if [[ "$APPLY" != true ]]; then
-  # ---- dry-run: 削除対象の件数と id を表示するのみ（無変更） ----
+  # ---- dry-run: 削除対象の件数と id を表示するのみ（無変更）。ロックは trap で解放される ----
   echo "=== knowledge-prune.sh --compact dry-run ==="
   echo "lessons.jsonl: $lessons_jsonl"
   echo "現在の行数: $total_lines"
@@ -135,52 +187,11 @@ if [[ "$APPLY" != true ]]; then
   exit 0
 fi
 
-# ---- --apply: 実書き換え（tmp → mv 原子的置換 + flock） ----
+# ---- --apply: 実書き換え（tmp → mv 原子的置換。ロックは取得済みのまま維持する） ----
 tmp_file="$(mktemp "${knowledge_dir}/.lessons.jsonl.XXXXXX")"
-cleanup_tmp() {
-  [[ -f "$tmp_file" ]] && rm -f "$tmp_file"
-}
-trap cleanup_tmp EXIT
-
-_write_compacted() {
-  printf '%s' "$compact_summary" | jq -c '.[] | select(.remove | not) | .last' > "$tmp_file"
-}
-
-# knowledge-append.sh の追記ロックと同一パスを奪い合う（append 中の書き換え衝突防止）。
-# ロックパスは git 除外領域の state/ 配下に置く（knowledge/ 内に .lock を残置すると
-# untracked 差分として git status を汚染し誤コミットのリスクがあるため）。
-lock_base_dir="${repo_root}/.iterate-team/state"
-mkdir -p "$lock_base_dir"
-
-if command -v flock >/dev/null 2>&1; then
-  lock_file="${lock_base_dir}/knowledge-lessons.lock"
-  exec 9>>"$lock_file"
-  if ! flock -x -w 5 9; then
-    echo "flock timeout: $lessons_jsonl" >&2
-    exit 1
-  fi
-  _write_compacted
-  mv "$tmp_file" "$lessons_jsonl"
-  trap - EXIT
-  flock -u 9
-  exec 9>&-
-else
-  lock_dir="${lock_base_dir}/knowledge-lessons.lock.d"
-  waited=0
-  until mkdir "$lock_dir" 2>/dev/null; do
-    if [[ "$waited" -ge 50 ]]; then
-      echo "lock timeout: $lessons_jsonl" >&2
-      exit 1
-    fi
-    sleep 0.1
-    waited=$((waited + 1))
-  done
-  trap 'rmdir "$lock_dir" 2>/dev/null || true; cleanup_tmp' EXIT
-  _write_compacted
-  mv "$tmp_file" "$lessons_jsonl"
-  rmdir "$lock_dir" 2>/dev/null || true
-  trap - EXIT
-fi
+printf '%s' "$compact_summary" | jq -c '.[] | select(.remove | not) | .last' > "$tmp_file"
+mv "$tmp_file" "$lessons_jsonl"
+tmp_file=""
 
 echo "=== knowledge-prune.sh --compact --apply ==="
 echo "lessons.jsonl: $lessons_jsonl"

@@ -155,7 +155,7 @@ blocker が無ければステップ 6.6 へ。blocker があれば `self_improve
 2. `Agent subagent_type: team-retrospector` を起動。プロンプトキー: `plugin_root` / `session_id` / `state_root` / `knowledge_dir`（`<repo-root>/.iterate-team/knowledge` 絶対パス）/ `tasks_dir` / `topic_slug` / `mode=light`
 3. 戻り値 JSON（`new_lessons` / `updated_lessons` / `deprecated` / `proposals`）を検証 → `Bash git status --porcelain -- .iterate-team/knowledge/` で差分確認 → 差分があれば**個別 `git add`**（`lessons.jsonl` / `lessons.md` / `.gitattributes` / `proposals/` 配下の各ファイル。`git add -A` / `git add .` 禁止）→ 1 コミットにまとめる。subject `docs: セッションレトロスペクティブ知見を記録`、フッタ `Refs: retrospective-<session-id>`
 4. `<is_dev_container>=false`（host）: `team-publisher` による 2 回目 push（ステップ 6.6 と同じ規約）に本コミットを含める。`<is_dev_container>=true`（dev container）: push は skip（ステップ 7' の手動 push 案内に本コミットも含めて案内される）
-5. runlog `retrospective_completed`（detail: `{"mode":"light","lessons_recorded":N,"proposals_recorded":N}`）を追記 → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ進む
+5. runlog `retrospective_completed`（detail: `{"mode":"light","lessons_recorded":N,"proposals_recorded":M}`。`N` = `new_lessons` と `updated_lessons` の合計件数、`M` = `proposals` の件数。定義は runbook 6.7.4 と同一）を追記 → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ進む
 
 **fail-open 規定**: team-retrospector の起動失敗 / 戻り値 JSON 不正・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合、`Bash git restore -- .iterate-team/knowledge/` で tracked ファイルを復元する（untracked な生成物が残る場合は `git clean` を使わず放置してよい）→ runlog `retrospective_failed`（detail: `{"mode":"light","reason":"..."}`）を追記して**ステップ 7 へ続行する**。本ステップはハーネス全体の中で**唯一、失敗してもステップ 9（エスカレーション）へ遷移しない**ステップである（knowledge 記録の失敗で PR 完了を阻害しないため）。push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する。
 

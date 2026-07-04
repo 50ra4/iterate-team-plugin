@@ -306,6 +306,174 @@ assert_eq "2 回の再生成結果が同一" "$T7_FIRST" "$T7_SECOND"
 
 rm -rf "$T7_REPO"
 
+# ========== T8: 不正 JSON 行が1行混入していても、正常な行だけで digest 生成される ==========
+# 修正前は `jq -s '...' lessons.jsonl 2>/dev/null || echo '[]'` のため、jsonl 内に
+# 不正な行が1行あるだけで jq -s 全体が失敗し、プール全体が `[]` に化けて正常な既存レコード
+# の digest まで空になってしまっていた（PR レビュー指摘）。tolerant パースにより、不正行
+# だけをスキップし残りの正常行から digest が生成されることを検証する。
+run_case "T8: 正常2行+不正1行の jsonl から、正常2行分のダイジェストが生成される（不正1行はスキップ）"
+
+T8_REPO="$(make_isolated_repo)"
+T8_KNOWLEDGE="$T8_REPO/.iterate-team/knowledge"
+mkdir -p "$T8_KNOWLEDGE"
+T8_JSONL="$T8_KNOWLEDGE/lessons.jsonl"
+
+make_record "L-t8-a" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-planner"]' "valid lesson a" > "$T8_JSONL"
+echo 'this is not valid json {{{' >> "$T8_JSONL"
+make_record "L-t8-b" "high" "0" "2026-07-02T00:00:00Z" "active" '["team-planner"]' "valid lesson b" >> "$T8_JSONL"
+
+set +e
+T8_STDERR=$(CLAUDE_PROJECT_DIR="$T8_REPO" bash "$TARGET" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+T8_MD="$T8_KNOWLEDGE/lessons.md"
+assert_eq "exit code 0（不正行があっても異常終了しない）" "0" "$exit_code"
+T8_CONTENT="$(cat "$T8_MD" 2>/dev/null || true)"
+assert_contains "正常な1件目(L-t8-a)は掲載される" "L-t8-a" "$T8_CONTENT"
+assert_contains "正常な2件目(L-t8-b)は掲載される" "L-t8-b" "$T8_CONTENT"
+assert_contains "stderr に malformed line skipped 警告が出力される" "malformed line" "$T8_STDERR"
+
+rm -rf "$T8_REPO"
+
+# ========== T9: manual ブロックが2個ある場合は最初のみ温存される ==========
+run_case "T9: 既存 lessons.md に manual ブロックが2個ある場合、再生成後も最初のブロックのみ温存される"
+
+T9_REPO="$(make_isolated_repo)"
+T9_KNOWLEDGE="$T9_REPO/.iterate-team/knowledge"
+mkdir -p "$T9_KNOWLEDGE"
+T9_JSONL="$T9_KNOWLEDGE/lessons.jsonl"
+make_record "L-t9-1" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-planner"]' "lesson" > "$T9_JSONL"
+
+cat > "$T9_KNOWLEDGE/lessons.md" <<'EOF'
+# 知見ダイジェスト（自動生成）
+
+<!-- manual:start -->
+最初のブロック（これだけが温存されるべき）。
+<!-- manual:end -->
+
+以下は誤って残った2個目の manual ブロック（無視されるべき）。
+
+<!-- manual:start -->
+2個目のブロック（無視されるべき）。
+<!-- manual:end -->
+EOF
+
+set +e
+CLAUDE_PROJECT_DIR="$T9_REPO" bash "$TARGET" >/dev/null 2>&1
+exit_code=$?
+set -e
+
+T9_CONTENT="$(cat "$T9_KNOWLEDGE/lessons.md")"
+assert_eq "exit code 0" "0" "$exit_code"
+assert_contains "最初の manual ブロックの内容が温存される" "最初のブロック（これだけが温存されるべき）" "$T9_CONTENT"
+assert_not_contains "2個目の manual ブロックの内容は温存されない" "2個目のブロック（無視されるべき）" "$T9_CONTENT"
+
+rm -rf "$T9_REPO"
+
+# ========== T10: manual:end マーカー欠落時は空ブロックへフォールバック + 警告 ==========
+run_case "T10: manual:start はあるが manual:end が無い場合、空の manual ブロックへフォールバックし stderr に警告が出る"
+
+T10_REPO="$(make_isolated_repo)"
+T10_KNOWLEDGE="$T10_REPO/.iterate-team/knowledge"
+mkdir -p "$T10_KNOWLEDGE"
+T10_JSONL="$T10_KNOWLEDGE/lessons.jsonl"
+make_record "L-t10-1" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-planner"]' "lesson" > "$T10_JSONL"
+
+cat > "$T10_KNOWLEDGE/lessons.md" <<'EOF'
+# 知見ダイジェスト（自動生成）
+
+<!-- manual:start -->
+end マーカーが無いまま EOF まで続くブロック（本文はここに含まれるべきではない）。
+EOF
+
+set +e
+T10_STDERR=$(CLAUDE_PROJECT_DIR="$T10_REPO" bash "$TARGET" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+T10_CONTENT="$(cat "$T10_KNOWLEDGE/lessons.md")"
+assert_eq "exit code 0" "0" "$exit_code"
+assert_contains "end マーカー欠落時は空の manual ブロックにフォールバックする" $'<!-- manual:start -->\n<!-- manual:end -->' "$T10_CONTENT"
+assert_not_contains "end マーカーが無い旧本文は取り込まれない" "end マーカーが無いまま EOF まで続くブロック" "$T10_CONTENT"
+assert_contains "stderr に manual:end 欠落の警告が出力される" "manual:end" "$T10_STDERR"
+
+rm -rf "$T10_REPO"
+
+# ========== T11: digest 実行中の並走 append で lessons.jsonl が壊れず digest も正常終了する ==========
+run_case "T11: digest 実行中に append を並走させても lessons.jsonl は壊れず、digest は正常終了する"
+
+T11_REPO="$(make_isolated_repo)"
+T11_KNOWLEDGE="$T11_REPO/.iterate-team/knowledge"
+mkdir -p "$T11_KNOWLEDGE"
+T11_JSONL="$T11_KNOWLEDGE/lessons.jsonl"
+for i in $(seq -w 1 20); do
+  make_record "L-t11-$i" "medium" "0" "2026-07-01T00:00:00Z" "active" '["team-generator"]' "lesson $i" >> "$T11_JSONL"
+done
+
+APPEND_TARGET="${SCRIPT_DIR}/../knowledge-append.sh"
+pids=()
+for i in $(seq 1 5); do
+  (
+    record="{\"category\":\"impl\",\"target_agents\":[\"team-generator\"],\"trigger\":\"concurrent t${i}\",\"lesson\":\"concurrent lesson ${i}\",\"evidence\":[{\"session_id\":\"s${i}\",\"event\":\"e${i}\"}],\"status\":\"active\",\"source\":\"manual\"}"
+    CLAUDE_PROJECT_DIR="$T11_REPO" bash "$APPEND_TARGET" "$record" >/dev/null 2>&1
+  ) &
+  pids+=($!)
+done
+
+set +e
+CLAUDE_PROJECT_DIR="$T11_REPO" bash "$TARGET" >/dev/null 2>&1
+digest_exit=$?
+set -e
+
+for p in "${pids[@]}"; do
+  wait "$p"
+done
+
+assert_eq "digest 実行時点で exit code 0" "0" "$digest_exit"
+
+T11_INVALID=0
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  echo "$line" | jq empty >/dev/null 2>&1 || T11_INVALID=$((T11_INVALID + 1))
+done < "$T11_JSONL"
+assert_eq "並走後も lessons.jsonl の全行が valid JSON（破損なし）" "0" "$T11_INVALID"
+
+T11_LINE_COUNT="$(wc -l < "$T11_JSONL" | tr -d ' ')"
+assert_eq "並走 append 5件分がすべて追記されている（20+5=25行）" "25" "$T11_LINE_COUNT"
+
+rm -rf "$T11_REPO"
+
+# ========== T12: 複数 agent 宛レッスンは両セクションに掲載されるが、全体プールの計上は1回のみ ==========
+run_case 'T12: target_agents に複数 agent を含むレッスンは両セクションに掲載されるが、全体20件プールへの計上は1回のみ'
+
+T12_REPO="$(make_isolated_repo)"
+T12_KNOWLEDGE="$T12_REPO/.iterate-team/knowledge"
+mkdir -p "$T12_KNOWLEDGE"
+T12_JSONL="$T12_KNOWLEDGE/lessons.jsonl"
+make_record "L-t12-dual" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-planner","team-generator"]' "dual target lesson" > "$T12_JSONL"
+make_record "L-t12-single" "high" "0" "2026-07-01T00:00:00Z" "active" '["team-evaluator"]' "single target lesson" >> "$T12_JSONL"
+
+set +e
+CLAUDE_PROJECT_DIR="$T12_REPO" bash "$TARGET" >/dev/null 2>&1
+exit_code=$?
+set -e
+
+T12_MD="$T12_KNOWLEDGE/lessons.md"
+assert_eq "exit code 0" "0" "$exit_code"
+
+T12_PLANNER_SECTION="$(awk '/^## team-planner$/{flag=1; next} /^## /{flag=0} flag' "$T12_MD")"
+T12_GENERATOR_SECTION="$(awk '/^## team-generator$/{flag=1; next} /^## /{flag=0} flag' "$T12_MD")"
+assert_contains "team-planner セクションに dual レッスンが掲載される" "L-t12-dual" "$T12_PLANNER_SECTION"
+assert_contains "team-generator セクションに dual レッスンが掲載される" "L-t12-dual" "$T12_GENERATOR_SECTION"
+
+T12_LISTED_LINES="$(grep -cE '^- \[L-' "$T12_MD" 2>/dev/null || echo 0)"
+T12_UNIQUE_IDS="$(grep -oE '\[L-[^]]+\]' "$T12_MD" | sort -u | wc -l | tr -d ' ')"
+assert_eq "掲載行数は3（dual レッスンが2セクションに重複掲載されるため）" "3" "$T12_LISTED_LINES"
+assert_eq "ユニーク id 数は2（全体プールへの計上は dual レッスンにつき1回のみ）" "2" "$T12_UNIQUE_IDS"
+
+rm -rf "$T12_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

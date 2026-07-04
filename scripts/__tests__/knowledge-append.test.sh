@@ -51,6 +51,17 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "  PASS: $label (does not contain '$needle')"
+    pass_count=$((pass_count + 1))
+  else
+    echo "  FAIL: $label (unexpectedly contains '$needle')" >&2
+    fail_count=$((fail_count + 1))
+  fi
+}
+
 assert_matches_regex() {
   local label="$1" pattern="$2" haystack="$3"
   if echo "$haystack" | grep -qE "$pattern"; then
@@ -329,6 +340,124 @@ assert_eq "knowledge/ 配下にロックファイルが残置されない" "0" "
 assert_path_exists "ロック実体は state/ 配下に作られる" "$T10_REPO/.iterate-team/state/knowledge-lessons.lock"
 
 rm -rf "$T10_REPO"
+
+# ========== T11: lesson が201字だと拒否される ==========
+run_case "T11: lesson が201字（200字超過）だと非ゼロ終了で拒否される"
+
+T11_REPO="$(make_isolated_repo)"
+T11_LESSON_201="$(printf 'a%.0s' $(seq 1 201))"
+T11_RECORD="$(jq -nc --arg l "$T11_LESSON_201" '{category:"impl",target_agents:["team-generator"],trigger:"t",lesson:$l,evidence:[{session_id:"s",event:"e"}],status:"active",source:"manual"}')"
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T11_REPO" bash "$TARGET" "$T11_RECORD" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+assert_contains "stderr に lesson 文字数超過の理由が出力される" "lesson" "$stderr"
+
+rm -rf "$T11_REPO"
+
+# ========== T12: lesson がちょうど200字は受理される ==========
+run_case "T12: lesson がちょうど200字は受理される（境界値）"
+
+T12_REPO="$(make_isolated_repo)"
+T12_LESSON_200="$(printf 'a%.0s' $(seq 1 200))"
+T12_RECORD="$(jq -nc --arg l "$T12_LESSON_200" '{category:"impl",target_agents:["team-generator"],trigger:"t",lesson:$l,evidence:[{session_id:"s",event:"e"}],status:"active",source:"manual"}')"
+
+set +e
+stdout=$(CLAUDE_PROJECT_DIR="$T12_REPO" bash "$TARGET" "$T12_RECORD" 2>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 0（200字ちょうどは境界内）" "0" "$exit_code"
+assert_matches_regex "id が正しく発行される" "^L-[0-9]{8}T[0-9]{4}-[0-9a-f]{4}$" "$stdout"
+
+rm -rf "$T12_REPO"
+
+# ========== T13: target_agents の typo は拒否される ==========
+run_case "T13: target_agents に typo（team-plannr）を含むと非ゼロ終了で拒否される"
+
+T13_REPO="$(make_isolated_repo)"
+TYPO_TARGET='{"category":"impl","target_agents":["team-plannr"],"trigger":"t","lesson":"l","evidence":[{"session_id":"s","event":"e"}],"status":"active","source":"manual"}'
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T13_REPO" bash "$TARGET" "$TYPO_TARGET" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+assert_contains "stderr に target_agents 違反の理由が出力される" "target_agents" "$stderr"
+
+rm -rf "$T13_REPO"
+
+# ========== T14: target_agents に有効だが注入対象外の agent 名（team-publisher）は拒否される ==========
+run_case "T14: target_agents に team-publisher（有効な agent 名だが注入対象外）を含むと非ゼロ終了で拒否される"
+
+T14_REPO="$(make_isolated_repo)"
+NON_INJECTED_TARGET='{"category":"impl","target_agents":["team-publisher"],"trigger":"t","lesson":"l","evidence":[{"session_id":"s","event":"e"}],"status":"active","source":"manual"}'
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T14_REPO" bash "$TARGET" "$NON_INJECTED_TARGET" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+assert_contains "stderr に target_agents 違反の理由が出力される" "target_agents" "$stderr"
+
+rm -rf "$T14_REPO"
+
+# ========== T15: evidence 要素が文字列だと拒否される ==========
+run_case "T15: evidence の要素がオブジェクトでなく文字列だと非ゼロ終了で拒否される"
+
+T15_REPO="$(make_isolated_repo)"
+STRING_EVIDENCE='{"category":"impl","target_agents":["team-generator"],"trigger":"t","lesson":"l","evidence":["just a string"],"status":"active","source":"manual"}'
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T15_REPO" bash "$TARGET" "$STRING_EVIDENCE" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+assert_contains "stderr に evidence 違反の理由が出力される" "evidence" "$stderr"
+
+rm -rf "$T15_REPO"
+
+# ========== T16: lesson に "<!-- manual:" を含むと拒否される ==========
+run_case "T16: lesson に '<!-- manual:' を含むと非ゼロ終了で拒否される（digest の manual ブロック抽出を壊すため）"
+
+T16_REPO="$(make_isolated_repo)"
+MANUAL_MARKER_IN_LESSON='{"category":"impl","target_agents":["team-generator"],"trigger":"t","lesson":"<!-- manual:start --> injected","evidence":[{"session_id":"s","event":"e"}],"status":"active","source":"manual"}'
+
+set +e
+stderr=$(CLAUDE_PROJECT_DIR="$T16_REPO" bash "$TARGET" "$MANUAL_MARKER_IN_LESSON" 2>&1 1>/dev/null)
+exit_code=$?
+set -e
+
+assert_eq "exit code 非ゼロ" "1" "$exit_code"
+assert_contains "stderr に manual マーカー混入の理由が出力される" "manual" "$stderr"
+
+rm -rf "$T16_REPO"
+
+# ========== T17: .gitattributes が末尾改行なしでも追記行が連結されない ==========
+# session-start.sh の ensure_state_ignored と同じ末尾改行ガードの回帰確認。
+run_case "T17: 既存 .gitattributes が末尾改行なしでも merge=union 行が既存行と連結されずに追記される"
+
+T17_REPO="$(make_isolated_repo)"
+mkdir -p "$T17_REPO/.iterate-team/knowledge"
+T17_GITATTR="$T17_REPO/.iterate-team/knowledge/.gitattributes"
+printf 'existing-pattern -diff' > "$T17_GITATTR"
+
+CLAUDE_PROJECT_DIR="$T17_REPO" bash "$TARGET" "$VALID_RECORD" >/dev/null 2>&1
+
+T17_CONTENT="$(cat "$T17_GITATTR")"
+assert_contains "既存行は保持される" "existing-pattern -diff" "$T17_CONTENT"
+assert_contains "merge=union 行が追加される" "lessons.jsonl merge=union" "$T17_CONTENT"
+assert_not_contains "既存行と追記行が連結（改行なしで結合）されていない" "existing-pattern -difflessons.jsonl merge=union" "$T17_CONTENT"
+T17_LINE_COUNT="$(wc -l < "$T17_GITATTR" | tr -d ' ')"
+assert_eq "改行が挿入されて2行になっている" "2" "$T17_LINE_COUNT"
+
+rm -rf "$T17_REPO"
 
 # ========== Summary ==========
 echo ""

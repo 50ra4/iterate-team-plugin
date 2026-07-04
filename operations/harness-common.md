@@ -34,6 +34,16 @@ Orchestrator はステップ 0.0（session-init 取得）で `<knowledge_digest_
 
 agent 側の適用規則（対象セクションの限定・タスク仕様との矛盾時の劣後・`lesson_applied` の記録条件）は [`templates/_partials/knowledge-injection.md`](../templates/_partials/knowledge-injection.md) を参照。
 
+**代理記録の義務**: 注入対象 5 agent のうち Bash を持たない agent（`team-planner` / `team-interviewer`）は `runlog-append.sh` による `lesson_applied` の自己記録ができない。これらの agent の戻り値に `適用レッスン: L-...` 行が含まれる場合、Orchestrator は各 `lesson_id` につき以下を実行して代理記録する:
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" lesson_applied '{"lesson_id":"L-...","agent":"<agent名>","recorded_by":"orchestrator"}'
+```
+
+**二重記録の防止**: Bash を持つ agent（`team-generator` / `team-evaluator` / `team-test-coder`）は自己記録するため、これらの戻り値の `適用レッスン:` 行に対して Orchestrator は代理記録**しない**。
+
+規約の対は `templates/_partials/knowledge-injection.md` 規則3。値の正本は [`knowledge-policy.md#7-注入規約`](./knowledge-policy.md#7-注入規約)。
+
 > **team 固有**: knowledge への書き込み主体はステップ 6.7（軽量レトロスペクティブ）と `/iterate-retrospect`（deep レトロスペクティブ）の `team-retrospector` のみに限定される。詳細は `iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ` を参照。
 
 ## 引数

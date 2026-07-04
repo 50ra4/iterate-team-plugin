@@ -70,7 +70,7 @@ argument-hint: [--sessions <N>] [--no-push]
    | `plugin_root`  | `<plugin_root>`（絶対パス）                                                            |
    | `session_id`   | `<retro-session-id>`（= `retro_<ts>`）                                                 |
    | `state_root`   | `.iterate-team/state/<retro-session-id>` の絶対パス                                    |
-   | `knowledge_dir`| `.iterate-team/knowledge/` の絶対パス                                                  |
+   | `knowledge_dir`| `.iterate-team/knowledge` の絶対パス                                                   |
    | `tasks_dir`    | 空文字列（deep モードは横断分析であり単一トピックの `tasks/` に紐づかないため未使用。agent 側の deep 手順もこのキーを参照しない） |
    | `topic_slug`   | `knowledge-retrospect`                                                                 |
    | `mode`         | `deep`                                                                                  |

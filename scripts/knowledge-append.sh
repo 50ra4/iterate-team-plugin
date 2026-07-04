@@ -14,6 +14,13 @@
 #       - knowledge/ , knowledge/proposals/ を mkdir -p
 #       - knowledge/.gitattributes に "lessons.jsonl merge=union" 行を（無ければ）追記
 #   - 必須キー / enum を jq で検証し、不正なら非 0 終了 + stderr に理由を出力する
+#       - lesson は 200 字以内（knowledge-policy.md §3）
+#       - target_agents の各要素は "*" / team-planner / team-generator / team-evaluator /
+#         team-interviewer / team-test-coder のいずれか（knowledge-digest.sh の
+#         AGENT_SECTIONS と二重定義。typo は「記録されるが digest に出ない」罠になるため）
+#       - evidence の各要素は session_id / event を持つオブジェクト
+#       - lesson / trigger に "<!-- manual:" を含めることは禁止（digest の manual ブロック
+#         抽出を壊すため）
 #   - id / ts / confidence / applied_count / merged_into / last_applied_ts を補完する
 #   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl へ 1 行 JSON（compact）で
 #     flock append する（runlog-append.sh のロック節を踏襲。macOS は mkdir ロック fallback）
@@ -52,6 +59,11 @@ mkdir -p "$knowledge_dir" "${knowledge_dir}/proposals"
 
 GITATTR_LINE="lessons.jsonl merge=union"
 if [[ ! -f "$gitattributes_file" ]] || ! grep -qxF "$GITATTR_LINE" "$gitattributes_file" 2>/dev/null; then
+  # 既存ファイルが改行で終わっていない場合、追記行が直前の行と連結されてしまわないよう
+  # 先に改行を足す（session-start.sh の ensure_state_ignored と同じ末尾改行ガード）。
+  if [[ -s "$gitattributes_file" ]] && [[ -n "$(tail -c1 "$gitattributes_file" 2>/dev/null)" ]]; then
+    printf '\n' >> "$gitattributes_file"
+  fi
   echo "$GITATTR_LINE" >> "$gitattributes_file"
 fi
 
@@ -77,14 +89,38 @@ check '.category as $c | ["plan","impl","test","review","acceptance","env","proc
 check 'has("target_agents") and (.target_agents | type == "array") and (.target_agents | length > 0)' \
   "target_agents must be a non-empty array"
 
+# target_agents の各要素は "*" または注入対象 5 agent のいずれかに限定する。
+# 相互参照: この許容集合は knowledge-digest.sh の AGENT_SECTIONS と二重定義になっている
+# （knowledge-policy.md §7 の注入対象 5 agent + 共通 "*"）。typo した値は検証をすり抜けると
+# 「記録はされるが digest に永遠に表示されない」罠になるため、ここで enum 検証する。
+check '(.target_agents | all(. as $a | ["*","team-planner","team-generator","team-evaluator","team-interviewer","team-test-coder"] | index($a) != null))' \
+  'target_agents elements must each be one of "*"/team-planner/team-generator/team-evaluator/team-interviewer/team-test-coder'
+
 check 'has("trigger") and (.trigger | type == "string") and (.trigger | length > 0)' \
   "trigger is required (non-empty string)"
 
 check 'has("lesson") and (.lesson | type == "string") and (.lesson | length > 0)' \
   "lesson is required (non-empty string)"
 
+# lesson は命令形の教訓文 200 字以内（knowledge-policy.md §3）。jq の length は
+# 文字列に対しコードポイント数（=字数）を返す。
+check '(.lesson | length) <= 200' \
+  "lesson must be 200 characters or fewer"
+
 check 'has("evidence") and (.evidence | type == "array") and (.evidence | length > 0)' \
   "evidence must be a non-empty array"
+
+# evidence の各要素は {"session_id":"...","event":"..."} 形式のオブジェクトに限定する
+# （knowledge-policy.md §3。文字列や配列など他の型は digest 側の想定外構造になるため拒否）。
+check '(.evidence | all(. as $e | ($e | type) == "object" and ($e | has("session_id")) and ($e | has("event"))))' \
+  "evidence elements must be objects with session_id and event keys"
+
+# lesson / trigger に manual ブロックのマーカー文字列を混入させることを禁止する。
+# knowledge-digest.sh の manual ブロック抽出は <!-- manual:start --> 〜 <!-- manual:end -->
+# をテキスト全体から検索するため、レコード側にこの文字列が混入すると抽出ロジックを
+# 壊す（意図しない範囲を manual ブロックとして温存/破棄してしまう）。
+check '((.lesson | test("<!-- manual:") | not) and (.trigger | test("<!-- manual:") | not))' \
+  'lesson/trigger must not contain the literal string "<!-- manual:" (would break digest manual-block extraction)'
 
 check 'has("status")' "status is required"
 check '.status as $s | ["active","deprecated","merged"] | index($s) != null' \

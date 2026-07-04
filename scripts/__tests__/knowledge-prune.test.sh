@@ -239,6 +239,69 @@ assert_contains "stdout に削除した id が報告される" "L-t5-dup" "$stdo
 
 rm -rf "$T5_REPO"
 
+# ========== T6: TOCTOU 回帰防止 ==========
+# --compact の圧縮結果算出（jq 読み取り）がロック取得より前に行われていると、
+# 「外部プロセスがロックを保持している間に別プロセスが追記した行」が、ロック解放後に
+# 実行される --apply の mv によって消失してしまう（読み取り時点のスナップショットに
+# その追記行が反映されていないため）。
+#
+# ここでは flock を用いて外部プロセス（このテスト自身）が先にロックを握り、その状態で
+# prune --apply をバックグラウンド起動する。ロック保持中に lessons.jsonl へ新規 id の
+# 行を直接追記し、その後ロックを解放する。
+#   - 修正後（読み取りがロック取得後）: prune はロック解放を待ってから読み取るため、
+#     追記された行を含めて圧縮結果が算出され、mv 後も追記行が残る。
+#   - 修正前（読み取りがロック取得前）: prune はロック取得を待たずに即座に（数百ms未満で）
+#     読み取りを終えてしまうため、追記された行を含まないスナップショットで mv され、
+#     追記行が失われる。
+# タイミングに依存せず決定的に判定できるよう、「ロックを外部が保持している間だけ」
+# 追記を行い、それ以降に prune のロック取得・書き込みが起きる順序を固定している。
+run_case "T6: 外部プロセスがロック保持中に追記した行が、ロック解放後の prune --apply でも失われない（TOCTOU 回帰防止）"
+
+T6_REPO="$(make_isolated_repo)"
+T6_KNOWLEDGE="$T6_REPO/.iterate-team/knowledge"
+mkdir -p "$T6_KNOWLEDGE"
+T6_JSONL="$T6_KNOWLEDGE/lessons.jsonl"
+T6_STATE="$T6_REPO/.iterate-team/state"
+mkdir -p "$T6_STATE"
+T6_LOCK="$T6_STATE/knowledge-lessons.lock"
+
+make_record "L-t6-dup" "2026-01-01T00:00:00Z" "active" "first" > "$T6_JSONL"
+make_record "L-t6-dup" "2026-01-02T00:00:00Z" "active" "second" >> "$T6_JSONL"
+
+# 外部プロセス（このテストシェル自身）が先にロックを握る
+# （knowledge-append.sh / knowledge-prune.sh と同一のロックファイルパスを使う）。
+exec 8>"$T6_LOCK"
+flock -x 8
+
+T6_STDOUT_FILE="$TMPDIR_GLOBAL/t6-prune-stdout.txt"
+(CLAUDE_PROJECT_DIR="$T6_REPO" bash "$TARGET" --compact --apply > "$T6_STDOUT_FILE" 2>&1) &
+prune_pid=$!
+
+# prune がロック待ちに入るための猶予（このテストの正しさ自体はタイミングに依存しない。
+# 修正前の実装で読み取りが即座に終わってしまうことを再現するための待機であり、
+# 修正後の実装ではロックを保持している限り prune は読み取りにすら進めない）。
+sleep 0.3
+
+# ロックを外部が握ったまま、新規 id の行を直接追記する
+# （この行が prune の圧縮結果に反映されるかどうかが TOCTOU 修正の検証点）。
+make_record "L-t6-concurrent" "2026-01-03T00:00:00Z" "active" "concurrent lesson" >> "$T6_JSONL"
+
+# ロックを解放し、prune --apply の完了を待つ
+flock -u 8
+exec 8>&-
+
+wait "$prune_pid"
+prune_exit=$?
+
+T6_STDOUT="$(cat "$T6_STDOUT_FILE" 2>/dev/null || true)"
+T6_CONTENT="$(cat "$T6_JSONL")"
+
+assert_eq "prune --apply は exit 0" "0" "$prune_exit"
+assert_contains "ロック保持中に追記された行(L-t6-concurrent)が prune 後も残る" "L-t6-concurrent" "$T6_CONTENT"
+assert_eq "L-t6-dup は圧縮されて最終レコード(second)のみ残る" "second" "$(jq -r 'select(.id=="L-t6-dup") | .lesson' "$T6_JSONL")"
+
+rm -rf "$T6_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

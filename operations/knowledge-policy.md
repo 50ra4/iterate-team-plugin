@@ -56,6 +56,8 @@
 
 更新（hit-count 加算・deprecate・merge）は**同一 `id` の上書きレコードを append することで表現する**（rewrite しない）。これにより flock append のみで並走安全性を確保する。物理圧縮は `knowledge-prune.sh --compact` のみが行う。
 
+上書きレコードは部分フィールドではなく、**既存レコード（同一 `id` の最終レコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える**。`knowledge-append.sh` は上書きレコードにも新規と同一の必須キー検証を適用する。
+
 ## 4. ダイジェスト `lessons.md` の掲載規則
 
 `knowledge-digest.sh` にハードコードされる確定値であり、以下の規則で決定的に再生成する。
@@ -76,6 +78,8 @@
   8. `<!-- manual:start -->` 〜 `<!-- manual:end -->`（手編集温存ブロック）
 
 手編集は manual ブロック内のみ許可する。それ以外の箇所は再生成のたびに消える。
+
+`target_agents` に複数の agent 名を持つレッスンは**該当する各セクションに掲載される**（全体最大 20 件のカウントには 1 回のみ計上する）。
 
 ## 5. 記録量の上限と品質規律
 
@@ -98,6 +102,7 @@
 - **重複統合**: `evidence` が多い側を残し、他方を `status: merged` とし `merged_into` に残す側の `id` を設定する
 - **降格・改訂**: 「適用されたのに同カテゴリの失敗が再発」した場合、`confidence` を降格するか教訓文（`lesson`）を改訂する
 - **物理削除**: `knowledge-prune.sh --compact --apply` によってのみ実施する。同一 `id` の圧縮（最終レコードのみ残す）、および `status: deprecated` かつ初回記録から **90 日超**のレコードの削除を行う
+- **上書きレコードの発行方式**: 上記「減衰条件」「重複統合」「降格・改訂」がいずれも発行する上書きレコードは §3 と同一の方式に従う。既存レコード（同一 `id` の最終レコード）を読み取って全フィールドを再発行し、変更するフィールドのみ差し替える。`knowledge-append.sh` は新規レコードと同一の必須キー検証をここでも適用する
 
 ## 7. 注入規約
 
@@ -115,7 +120,9 @@ agent 側の適用規則は [`templates/_partials/knowledge-injection.md`](../te
 
 - ファイル不在時は黙って skip する
 - タスク仕様・`universal-rules` と矛盾する場合はレッスン側を無視する
-- 実際に判断を変えた場合のみ `lesson_applied` を runlog に記録する
+- 実際に判断を変えた場合のみ `lesson_applied` を記録する。記録経路は agent の tools 構成により **2 経路**に分岐する:
+  - **Bash を持つ agent**（`team-generator` / `team-evaluator` / `team-test-coder`）: 自身が `<plugin_root>/scripts/runlog-append.sh` を呼び出して自己記録する
+  - **Bash を持たない agent**（`team-planner` / `team-interviewer`）: 戻り値テキストに `適用レッスン: L-...` 行で報告し、**Orchestrator が代理記録する**（detail に `"recorded_by":"orchestrator"` を含める）。手順の正本は [`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`](./harness-common.md#knowledge-ダイジェスト注入全コマンド共通)
 
 対象 agent を拡張する際の目安は「そのエージェントの判断ミスがレッスン化された実績が 3 件以上」であることとする。
 
@@ -169,11 +176,11 @@ proposal レポートの構成は以下のとおり。
 
 | event                       | detail フィールド例                                                   |
 | --------------------------- | ---------------------------------------------------------------------- |
-| `retrospective_started`     | `{"mode": "light", "session_id": "..."}`                               |
-| `retrospective_completed`   | `{"mode": "light", "lessons_recorded": 2, "proposals_recorded": 0}`     |
+| `retrospective_started`     | `{"mode": "light"}`（`session_id` は `runlog-append.sh` が top-level に自動付与するため detail には含めない）|
+| `retrospective_completed`   | light: `{"mode": "light", "lessons_recorded": 2, "proposals_recorded": 0}` / deep（変更あり）: `{"mode":"deep","new_lessons":N,"updated_lessons":N,"deprecated":N,"proposals":N}` / deep（変更なし）: `{"mode":"deep","lessons_recorded":0,"changed":false}` |
 | `retrospective_failed`      | `{"mode": "light", "reason": "git restore 実行、要因: ..."}`           |
 | `lesson_recorded`           | `{"lesson_id": "L-20260703T0930-a1b2", "category": "review"}`           |
-| `lesson_applied`            | `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner"}`        |
+| `lesson_applied`            | 自己記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner"}` / 代理記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner", "recorded_by": "orchestrator"}` |
 | `plugin_proposal_recorded`  | `{"path": "proposals/20260703_xxx.md", "target_asset": "..."}`          |
 
 ## 11. 関連スクリプト一覧

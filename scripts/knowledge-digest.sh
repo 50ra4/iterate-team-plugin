@@ -37,17 +37,36 @@ lessons_md="${knowledge_dir}/lessons.md"
 mkdir -p "$knowledge_dir"
 
 # agent 別セクションの表示順（knowledge-policy.md §4 の確定順）
+# 相互参照: この5 agent 名の許容集合は knowledge-append.sh の target_agents enum 検証
+# （"*" / team-planner / team-generator / team-evaluator / team-interviewer /
+# team-test-coder）と二重定義になっている。追加・変更時は両スクリプトを同時に直すこと。
 AGENT_SECTIONS=(team-planner team-generator team-evaluator team-interviewer team-test-coder)
 
 # ---- 既存 manual ブロックの抽出（温存対象） ----
+# 最初の <!-- manual:start --> から、その後最初に現れる <!-- manual:end --> までのみを
+# 抽出する（2 個目以降の manual ブロックは無視する）。end マーカーが見つからない場合は
+# 「壊れた/閉じていないブロック」とみなし、EOF までを取り込まずに空ブロックへフォール
+# バックした上で stderr に警告を出す（誤って本文全体を manual 扱いにして再生成不能に
+# なるのを防ぐため）。
 extract_manual_block() {
-  if [[ -f "$lessons_md" ]]; then
-    awk '
-      /<!-- manual:start -->/ { flag=1 }
-      flag { print }
-      /<!-- manual:end -->/ { flag=0 }
-    ' "$lessons_md"
+  if [[ ! -f "$lessons_md" ]]; then
+    return 0
   fi
+
+  if ! grep -q '<!-- manual:start -->' "$lessons_md"; then
+    return 0
+  fi
+
+  local start_line end_line
+  start_line="$(grep -n -m1 '<!-- manual:start -->' "$lessons_md" | cut -d: -f1)"
+  end_line="$(awk -v s="$start_line" 'NR > s && /<!-- manual:end -->/ { print NR; exit }' "$lessons_md")"
+
+  if [[ -z "$end_line" ]]; then
+    echo "knowledge-digest.sh: warning: manual:start はあるが manual:end が見つかりません。manual ブロックを空にフォールバックします。" >&2
+    return 0
+  fi
+
+  sed -n "${start_line},${end_line}p" "$lessons_md"
 }
 
 manual_block="$(extract_manual_block)"
@@ -57,8 +76,20 @@ fi
 
 # ---- 全体上位 20 件プール算出（status=active、同一 id 最終行勝ち） ----
 # lessons.jsonl が無い/空なら空プール。
+# 不正 JSON 行が混入していても、その行だけをスキップし残りは正常にダイジェスト化する
+# （tolerant パース）。全体を `[]` にフォールバックすると、正常な既存レコードの digest
+# までもが不正 1 行のせいで消え失せてしまうため（PR レビュー指摘）。
 if [[ -s "$lessons_jsonl" ]]; then
-  pool="$(jq -s '
+  total_line_count="$(wc -l < "$lessons_jsonl" | tr -d ' ')"
+  valid_json_lines="$(jq -R -c 'fromjson? // empty' "$lessons_jsonl" 2>/dev/null)"
+  valid_line_count="$(printf '%s\n' "$valid_json_lines" | grep -c '.' || true)"
+  valid_line_count="${valid_line_count:-0}"
+
+  if [[ "$valid_line_count" -lt "$total_line_count" ]]; then
+    echo "knowledge-digest.sh: warning: malformed line(s) skipped ($(( total_line_count - valid_line_count )) of ${total_line_count} lines in lessons.jsonl)" >&2
+  fi
+
+  pool="$(printf '%s\n' "$valid_json_lines" | jq -s '
     group_by(.id)
     | map(last)
     | map(select(.status == "active"))
@@ -68,7 +99,7 @@ if [[ -s "$lessons_jsonl" ]]; then
     | sort_by(._rank, (.applied_count // 0), .ts)
     | reverse
     | .[0:20]
-  ' "$lessons_jsonl" 2>/dev/null || echo '[]')"
+  ' 2>/dev/null || echo '[]')"
 else
   pool='[]'
 fi
