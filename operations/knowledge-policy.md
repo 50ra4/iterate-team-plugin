@@ -162,9 +162,10 @@ proposal レポートの構成は以下のとおり。
 
 レトロスペクティブが失敗した場合は以下のとおり fail-open する。
 
-1. `git restore -- .iterate-team/knowledge/` で復元する
-2. runlog に `retrospective_failed` を記録する
-3. ステップ 7 へ続行する（PR 完了を阻害しない）
+1. `git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）
+2. 残る untracked ファイル（`git status --porcelain -- .iterate-team/knowledge/` の `??`）を、`mkdir -p` した `.iterate-team/state/<session-id>/failed-retrospective/`（`/iterate-retrospect` の場合は `<retro-session-id>`）へ `mv` で退避する。`git clean` は使わない（state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
+3. runlog に `retrospective_failed` を記録する（退避を行った場合は detail に `evacuated_to` を含める）
+4. ステップ 7 へ続行する（PR 完了を阻害しない）
 
 ### deep レトロ（`/iterate-retrospect`）
 
@@ -182,7 +183,7 @@ proposal レポートの構成は以下のとおり。
 | --------------------------- | ---------------------------------------------------------------------- |
 | `retrospective_started`     | `{"mode": "light"}`（`session_id` は `runlog-append.sh` が top-level に自動付与するため detail には含めない）|
 | `retrospective_completed`   | light: `{"mode": "light", "lessons_recorded": 2, "proposals_recorded": 0}` / deep（変更あり）: `{"mode":"deep","new_lessons":N,"updated_lessons":N,"deprecated":N,"proposals":N}` / deep（変更なし）: `{"mode":"deep","lessons_recorded":0,"changed":false}` |
-| `retrospective_failed`      | `{"mode": "light", "reason": "git restore 実行、要因: ..."}`           |
+| `retrospective_failed`      | `{"mode": "light", "reason": "git restore 実行、要因: ...", "evacuated_to": ".iterate-team/state/<session-id>/failed-retrospective/"}`（`evacuated_to` は untracked 生成物の退避を行った場合のみ含める任意キー） |
 | `lesson_recorded`           | `{"lesson_id": "L-20260703T0930-a1b2", "category": "review"}`           |
 | `lesson_applied`            | 自己記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner"}` / 代理記録: `{"lesson_id": "L-20260703T0930-a1b2", "agent": "team-planner", "recorded_by": "orchestrator"}` |
 | `plugin_proposal_recorded`  | `{"path": "proposals/20260703_xxx.md", "target_asset": "..."}`          |

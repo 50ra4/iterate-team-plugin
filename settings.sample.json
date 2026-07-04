@@ -74,10 +74,16 @@
       "Bash(git log -1 --format=*)",
       "Bash(git log --grep=Refs:*)",
       "Bash(git log --grep=\"Refs:*)",
+      "Bash(git restore --staged --worktree -- .iterate-team/knowledge/)",
+      "Bash(git restore --staged --worktree -- .iterate-team/knowledge/*)",
 
       // (4) ハーネス状態の書き込み（対象リポ直下 .iterate-team/state/ 配下）
       "Write(.iterate-team/state/*/**)",
       "Edit(.iterate-team/state/*/**)",
+      // 6.7 fail-open の退避用（レトロスペクティブ失敗時に untracked な knowledge 生成物を
+      // .iterate-team/state/<session-id>/failed-retrospective/ へ退避する）
+      "Bash(mkdir -p .iterate-team/state/*)",
+      "Bash(mv .iterate-team/knowledge/* .iterate-team/state/*)",
 
       // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
       "Write(.iterate-team/knowledge/**)",

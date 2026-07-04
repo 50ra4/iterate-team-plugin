@@ -835,9 +835,10 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 `team-retrospector` の起動失敗 / 戻り値 JSON parse 失敗・必須キー欠落 / knowledge コミット失敗のいずれかが発生した場合:
 
-1. `Bash git restore -- .iterate-team/knowledge/` で tracked ファイルの変更を復元する。untracked な生成物（例: 新規 `proposals/*.md`）が残る場合があるが、`git clean` は使わず放置してよい（人間調査用に温存する）
-2. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>"}` を追記
-3. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
+1. `Bash git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）
+2. `Bash git status --porcelain -- .iterate-team/knowledge/` に残る `??`（untracked）のファイル（例: 新規 `proposals/*.md`、初回実行時の `lessons.jsonl` / `lessons.md`）を、`Bash mkdir -p .iterate-team/state/<session-id>/failed-retrospective/` を作成した上で `mv` により退避する。`.iterate-team/state/` は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される。`git clean` は使わない
+3. runlog `retrospective_failed` / `{"mode":"light","reason":"<失敗理由の要約>","evacuated_to":"<退避先ディレクトリ。手順2で退避を行った場合のみ含める>"}` を追記
+4. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップはハーネス内で唯一、失敗時もエスカレーションしないステップである。knowledge 記録の失敗で PR 完了を阻害しないため）
 
 push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する（6.7.3 参照）。
 

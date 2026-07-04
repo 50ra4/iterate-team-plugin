@@ -118,9 +118,9 @@ argument-hint: [--sessions <N>] [--no-push]
 
 team-retrospector の異常終了、またはステップ 4 のコミット失敗時は以下を行う。レトロスペクティブの失敗によってユーザー作業を止めないため、エスカレーションは行わない:
 
-1. `Bash git restore -- .iterate-team/knowledge/` で `.iterate-team/knowledge/` を復元する
+1. `.iterate-team/knowledge/` を以下の2段階で復旧する: a) `Bash git restore --staged --worktree -- .iterate-team/knowledge/` で index と worktree の両方を HEAD へ復元する（HEAD に存在しない新規ファイルは staged 解除され untracked に戻る）。b) `Bash git status --porcelain -- .iterate-team/knowledge/` に残る `??`（untracked）のファイルを、`Bash mkdir -p .iterate-team/state/<retro-session-id>/failed-retrospective/` を作成した上で `mv` により退避する（`git clean` は使わない。state/ は git 除外領域のため作業ツリーが clean に保たれ、かつ生成物は人間の事後調査用に温存される）
 2. 作成した `<retro-branch>` にコミットが 1 件もない（`<original-branch>` と同一 SHA）場合は `Bash git switch "<original-branch>"` の後 `Bash git branch -D "<retro-branch>"` でブランチを削除する。コミットが残っている場合は削除せずブランチのみ残し `<original-branch>` へ戻る
-3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>"}'` を追記する
+3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>","evacuated_to":"<退避先ディレクトリ。手順1bで退避を行った場合のみ含める>"}'` を追記する
 4. 失敗理由をユーザーへ報告して終了する
 
 ## 引数
