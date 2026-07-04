@@ -583,6 +583,50 @@ assert_eq "git status --porcelain が空（作業ツリーに dirty な差分が
 
 rm -rf "$T23_REPO"
 
+# ========== T24: 呼び出し元指定の ts は常に無視され現在時刻で上書きされる ==========
+# Codex レビュー第6ラウンド P1 指摘: 旧実装は `.ts = (.ts // $ts_now)` で呼び出し元
+# 指定の ts を温存していた。digest/prune の勝者選定が「最新 ts 勝ち
+# （max_by(.ts // "")）」に変更されたため、更新レコードが旧 ts を再掲すると同値タイ
+# になり、merge=union 統合後の物理順フォールバックで古いレコードが勝ち得る
+# （deprecated の復活・applied_count 更新の喪失）。ts は常にスクリプト側で採番される
+# ことを確認する。
+run_case "T24: payload に古い ts（2020-01-01）を指定しても保存されたレコードの ts は現在時刻で上書きされる"
+
+T24_REPO="$(make_isolated_repo)"
+OLD_TS_RECORD='{"ts":"2020-01-01T00:00:00Z","category":"review","target_agents":["team-planner"],"trigger":"t","lesson":"l","evidence":[{"session_id":"s","event":"e"}],"status":"active","source":"auto-retrospective"}'
+
+T24_BEFORE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+set +e
+stdout=$(CLAUDE_PROJECT_DIR="$T24_REPO" bash "$TARGET" "$OLD_TS_RECORD" 2>/dev/null)
+exit_code=$?
+set -e
+T24_AFTER="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+assert_eq "exit code 0" "0" "$exit_code"
+
+T24_SAVED_TS="$(jq -r '.ts' "$T24_REPO/.iterate-team/knowledge/lessons.jsonl")"
+assert_matches_regex "保存された ts が ISO8601 UTC 形式" "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" "$T24_SAVED_TS"
+
+if [[ "$T24_SAVED_TS" != "2020-01-01T00:00:00Z" ]]; then
+  echo "  PASS: 保存された ts は呼び出し元指定の古い値(2020-01-01T00:00:00Z)ではない"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: 保存された ts が呼び出し元指定の古い値のまま温存されている" >&2
+  fail_count=$((fail_count + 1))
+fi
+
+# 実行前後の現在時刻の範囲内（文字列比較で ISO8601 UTC は辞書順=時刻順と一致する）に
+# 収まっていることを確認する（= スクリプト実行時点で採番された ts であることの検証）。
+if [[ "$T24_SAVED_TS" > "$T24_BEFORE" || "$T24_SAVED_TS" == "$T24_BEFORE" ]] && [[ "$T24_SAVED_TS" < "$T24_AFTER" || "$T24_SAVED_TS" == "$T24_AFTER" ]]; then
+  echo "  PASS: 保存された ts は実行前後の現在時刻の範囲内 ($T24_BEFORE <= $T24_SAVED_TS <= $T24_AFTER)"
+  pass_count=$((pass_count + 1))
+else
+  echo "  FAIL: 保存された ts が実行前後の現在時刻の範囲外 ($T24_BEFORE <= $T24_SAVED_TS <= $T24_AFTER が成立しない)" >&2
+  fail_count=$((fail_count + 1))
+fi
+
+rm -rf "$T24_REPO"
+
 # ========== Summary ==========
 echo ""
 echo "======================================"

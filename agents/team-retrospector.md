@@ -33,7 +33,7 @@ Orchestrator（ステップ 6.7）または `/iterate-retrospect` から以下�
 2. 補助的に `<state_root>/responses/` と `<tasks_dir>/` 配下の関連ファイル（`eval-attempt-*.md`、`escalation.md` 等）を必要な範囲で `Read` する。
 3. 既存 knowledge（`<knowledge_dir>/lessons.md` と `<knowledge_dir>/lessons.jsonl`）を `Read` して重複チェックする。
 4. 教訓を抽出する。上限は **新規レッスン最大 3 件・プラグイン改善提案最大 1 件**（`knowledge-policy.md` §5）。同趣旨の既存レッスンがあれば新規レコードではなく該当 `id` の更新レコード（`applied_count` 加算等）を積む。当該セッションの `lesson_applied` イベントを集計し、該当レッスンの `applied_count` / `last_applied_ts` 更新レコードも積む。
-5. 記録する。1 件ずつ以下で append し、`id` は stdout から受領する（`ts`/`id` は script 側生成のため渡さない。更新レコードは既存レコード（同一 `id` のうち `ts` が最新のレコード）を `Read` して**全フィールドを再発行**し、変更するフィールドのみ差し替えて append する。部分フィールドの JSON（例: `{"id":"L-...","status":"deprecated"}` のみ）は `knowledge-append.sh` の必須キー検証で拒否される。`knowledge-policy.md` §3）:
+5. 記録する。1 件ずつ以下で append し、`id` は stdout から受領する（新規レコードは `ts`/`id` とも渡さない。いずれも script 側生成のため。更新レコードは `id` を必ず含め、**`ts` は含めない**（含めても `knowledge-append.sh` が常に新しい時刻で上書き採番するため無意味であるだけでなく、旧 `ts` を再掲すると同一 `id` のレコード間で `ts` が同値のタイを生み、max-ts 勝ち規則が機能しなくなるため、渡さないことで構造的に防止する）。更新レコードは既存レコード（同一 `id` のうち `ts` が最新のレコード）を `Read` して**全フィールドを再発行**し（`ts` を除く）、変更するフィールドのみ差し替えて append する。部分フィールドの JSON（例: `{"id":"L-...","status":"deprecated"}` のみ）は `knowledge-append.sh` の必須キー検証で拒否される。`knowledge-policy.md` §3）:
 
    ```bash
    <plugin_root>/scripts/knowledge-append.sh '{"session_id":"<session_id>","source":"auto-retrospective","category":"<plan|impl|test|review|acceptance|env|process>","target_agents":["team-..."],"trigger":"...","lesson":"...","evidence":[{"session_id":"<session_id>","event":"..."}],"status":"active","confidence":"low"}'
@@ -70,7 +70,7 @@ Orchestrator（ステップ 6.7）または `/iterate-retrospect` から以下�
    - **`lesson_applied` 集約**: 全対象セッションの `lesson_applied` イベントを集計し、該当レッスンの `applied_count` / `last_applied_ts` 更新レコードを積む
    - **減衰**: 「直近 5 セッションの runlog に `lesson_applied` なし **AND** 初回記録から 30 日超」に該当するレッスンは `status: deprecated` の上書きレコードを append する
 
-   本手順が発行するすべての上書きレコード（重複統合・矛盾解消・`lesson_applied` 集約・減衰）は、既存レコード（同一 `id` のうち `ts` が最新のレコード）の全フィールドを再発行し変更するフィールドのみ差し替える方式に従う（`knowledge-policy.md` §6）。
+   本手順が発行するすべての上書きレコード（重複統合・矛盾解消・`lesson_applied` 集約・減衰）は、既存レコード（同一 `id` のうち `ts` が最新のレコード）の全フィールドを再発行し（**`ts` を除く**。`knowledge-append.sh` が常に新しい時刻で上書き採番するため渡さない）、変更するフィールドのみ差し替える方式に従う（`knowledge-policy.md` §6）。
 3. `<plugin_root>/scripts/knowledge-prune.sh --compact --apply` を実行する（同一 `id` の圧縮、`deprecated` かつ初回記録から 90 日超のレコードの物理削除）。
 4. `<plugin_root>/scripts/knowledge-digest.sh` を実行して digest を再生成する。
 5. `<knowledge_dir>/proposals/INDEX.md` を作成または Write で全体再生成する（初回実行時は新規作成。Edit は不要）。

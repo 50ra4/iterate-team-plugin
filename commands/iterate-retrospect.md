@@ -76,7 +76,7 @@ argument-hint: [--sessions <N>] [--no-push]
 
 1. `Bash git status --porcelain -- .iterate-team/knowledge/` で差分を確認する
 2. **差分がある場合**: 変更ファイルを個別に `git add <file>` し、1 コミットにまとめる。subject `docs: knowledge を横断統合（deep レトロスペクティブ）`、body に統合サマリ（新規/統合/廃止件数）、footer `Refs: retrospective-deep-<ts>`
-3. **差分がない場合**: 「統合の結果、変更なし」と報告し、`Bash git switch "<original-branch>"` で元ブランチへ戻り、`<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_completed '{"mode":"deep","lessons_recorded":0,"changed":false}'` を追記して終了する（ステップ 5・6 は実行しない。ブランチ・コミットは残さない方針だが、コミット自体が存在しないため実質的に元ブランチと同一であり削除は不要）
+3. **差分がない場合**: 「統合の結果、変更なし」と報告し、`Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` で元ブランチへ戻り、`<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_completed '{"mode":"deep","lessons_recorded":0,"changed":false}'` を追記して終了する（ステップ 5・6 は実行しない。ブランチ・コミットは残さない方針だが、コミット自体が存在しないため実質的に元ブランチと同一であり削除は不要）
 4. コミット成功後、`<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_completed '{"mode":"deep","new_lessons":<N>,"updated_lessons":<N>,"deprecated":<N>,"proposals":<N>}'` を追記する（件数はステップ 3 の戻り値から算出）
 
 ## ステップ 5: push 分岐
@@ -104,14 +104,14 @@ argument-hint: [--sessions <N>] [--no-push]
 - push した場合: PR URL。push しなかった場合: 手動 push 手順
 - runlog パス（`.iterate-team/state/<retro-session-id>/runlog.jsonl`）
 
-報告後、`Bash git switch "<original-branch>"` で元ブランチへ戻る（**push の有無に関わらず、作成したブランチとコミットはローカルに残す**）。
+報告後、`Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` で元ブランチへ戻る（**push の有無に関わらず、作成したブランチとコミットはローカルに残す**）。
 
 ## 失敗時（fail-open・エスカレーションなし）
 
 team-retrospector の異常終了、またはステップ 4 のコミット失敗時は以下を行う。レトロスペクティブの失敗によってユーザー作業を止めないため、エスカレーションは行わない:
 
 1. `.iterate-team/knowledge/` を `Bash <plugin_root>/scripts/knowledge-recover.sh "<retro-session-id>"` で復旧する。スクリプトは staged 変更を unstage してから HEAD 追跡ファイルの worktree を復元し（HEAD に無い staged 新規ファイル — コミット失敗直後の生成物 — は削除せず untracked へ戻して退避対象に含める。tracked/staged が皆無の初回実行時は復元を skip する）、残る untracked 生成物（`.gitattributes` 等のドットファイルを含む）を `.iterate-team/state/<retro-session-id>/failed-retrospective/` へ退避して作業ツリーを clean に戻す（生成物は人間の事後調査用に温存し、`git clean` は使わない）。1 件以上退避した場合は退避先の相対パスを stdout に1行出力し、clean 化成功で exit 0、失敗時は stderr 診断 + exit 1 を返す
-2. 作成した `<retro-branch>` にコミットが 1 件もない（`<original-branch>` と同一 SHA）場合は `Bash git switch "<original-branch>"` の後 `Bash git branch -D "<retro-branch>"` でブランチを削除する。コミットが残っている場合は削除せずブランチのみ残し `<original-branch>` へ戻る
+2. 作成した `<retro-branch>` にコミットが 1 件もない（`<original-branch>` と同一 SHA）場合は `Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` の後 `Bash <plugin_root>/scripts/retrospect-delete-branch.sh "<retro-branch>"` でブランチを削除する。コミットが残っている場合は削除せずブランチのみ残し `<original-branch>` へ戻る
 3. `<plugin_root>/scripts/runlog-append.sh <retro-session-id> retrospective_failed '{"mode":"deep","reason":"<理由>","evacuated_to":"<退避先ディレクトリ。手順1でスクリプトが退避先を出力した場合のみ含める>"}'` を追記する
 4. 失敗理由をユーザーへ報告して終了する
 

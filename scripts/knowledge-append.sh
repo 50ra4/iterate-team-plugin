@@ -23,12 +23,33 @@
 #     dirty のままになるため、seed は検証の後段に置く）
 #       - knowledge/ , knowledge/proposals/ を mkdir -p
 #       - knowledge/.gitattributes に "lessons.jsonl merge=union" 行を（無ければ）追記
-#   - id / ts / confidence / applied_count / merged_into / last_applied_ts を補完する
+#   - id / confidence / applied_count / merged_into / last_applied_ts を補完する。
+#     ts は補完ではなく常にスクリプト側の現在時刻で上書きする（呼び出し元が指定した
+#     ts は常に無視する。拒否ではなく上書き。理由は「設計判断: ts 上書き」参照）
 #   - $REPO_ROOT/.iterate-team/knowledge/lessons.jsonl へ 1 行 JSON（compact）で
 #     flock append する（runlog-append.sh のロック節を踏襲。macOS は mkdir ロック fallback）
 #   - ロックは git-tracked の knowledge/ を汚染しないよう state/ 配下に置く
 #     （残置された .lock が untracked 差分としてステップ 6.7 の差分判定を誤発火させるため）
 #   - 標準出力に最終的な id（生成分含む）を出力する（呼び出し元が受け取る）
+#
+# 設計判断: ts は呼び出し元指定を常に無視し、スクリプト側の現在時刻で上書きする
+#   （Codex レビュー第6ラウンド P1 指摘）。knowledge-digest.sh / knowledge-prune.sh は
+#   同一 id が複数行存在する場合の勝者選定を「物理行順」から「最新 ts 勝ち
+#   （max_by(.ts // "")）」に変更済み（knowledge-prune.sh 修正5）。この規則の下で
+#   旧実装（`.ts = (.ts // $ts_now)`）が呼び出し元指定の ts を温存すると、
+#   retrospector が既存レコードを更新（applied_count 加算・status=deprecated 化等）
+#   する際に旧 ts をそのまま再掲した更新後レコードを append した場合、旧レコードと
+#   新レコードが同一 ts の「タイ」になる。jq の max_by はタイ時に入力順で後の要素を
+#   返す仕様だが、prune の merge=union 統合後は複数ブランチの物理結合順が保証されず、
+#   タイの場合に古い（更新前の）レコードが「後の要素」として勝ち残り得る
+#   （deprecated 化の復活・applied_count 更新の喪失）。ts を常にスクリプト側で
+#   採番することで、同一内容の再 append でも ts が必ず単調に新しくなり、
+#   「最新 ts 勝ち」規則が意図通り機能する。拒否ではなく上書きなのは、
+#   retrospector 側の「既存レコードの全フィールドを再構築して append する」更新
+#   フロー自体を壊さないため（呼び出し元が ts を省略する必要がなくなる）。
+#   なお id の `.id = (.id // $id_candidate)` は更新時に呼び出し元が指定した既存 id を
+#   温存する必要があるため（同一レコードの更新であることを示す唯一の鍵）、現行のまま
+#   変更しない。
 #
 # 仕様の正本: <plugin_root>/operations/knowledge-policy.md（§3・§11）
 
@@ -179,7 +200,7 @@ final_record="$(printf '%s' "$payload" | jq -c \
   --arg ts_now "$ts_now" \
   '
     .id = (.id // $id_candidate)
-  | .ts = (.ts // $ts_now)
+  | .ts = $ts_now
   | .confidence = (.confidence // "low")
   | .applied_count = (.applied_count // 0)
   | .merged_into = (.merged_into // null)

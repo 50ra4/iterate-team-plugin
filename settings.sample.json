@@ -59,6 +59,15 @@
       "Bash(<PLUGIN_ROOT>/scripts/knowledge-recover.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/retrospect-list-sessions.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/runlog-tail.sh *)",
+      // /iterate-retrospect の元ブランチ復帰・失敗時のブランチ削除用。引数検証つきラッパー
+      // (git-switch-branch.sh は先頭 `-` 引数拒否 + `git check-ref-format --branch` 検証の上で
+      // `git switch <branch>` を実行し、`git switch "--discard-changes" <branch>` のような
+      // 引用符トリック（シェルが引用符を除去し非引用フラグとして素通しする）を防ぐ。
+      // retrospect-delete-branch.sh は対象名が `^claude/knowledge-retrospect-[A-Za-z0-9._-]+$`
+      // に完全一致する場合のみ `git branch -D` を実行し、`git branch -D <retro> main` のような
+      // 末尾ワイルドカードが許す余剰引数注入を防ぐ）
+      "Bash(<PLUGIN_ROOT>/scripts/git-switch-branch.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/retrospect-delete-branch.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",
@@ -72,17 +81,8 @@
       "Bash(git status --porcelain*)",
       "Bash(git switch -c claude/*)",
       "Bash(git switch -c \"claude/*)",
-      // /iterate-retrospect の元ブランチ復帰用。引用符で始まる引数のみ許可することで、
-      // git switch -f / -C / --discard-changes 等の未コミット変更を破棄しうるフラグ形
-      // （非引用）を allowlist から構造的に除外する。コマンド側（iterate-retrospect.md）も
-      // 二重引用符付きの git switch "<original-branch>" を規定する。
-      "Bash(git switch \"*)",
       "Bash(git branch -m claude/*)",
       "Bash(git branch -m \"claude/*)",
-      // /iterate-retrospect fail-open（deep レトロでコミット0件）時の retro ブランチ削除用。
-      // 対象を knowledge-retrospect ブランチに限定する。
-      "Bash(git branch -D claude/knowledge-retrospect-*)",
-      "Bash(git branch -D \"claude/knowledge-retrospect-*)",
       "Bash(git log -1 --format=*)",
       "Bash(git log --grep=Refs:*)",
       "Bash(git log --grep=\"Refs:*)",
