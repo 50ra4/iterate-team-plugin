@@ -1,0 +1,98 @@
+# Agent Evals: {{PROJECT_NAME}}
+
+<!--
+Purpose: small, concrete tasks used to check that the agent still behaves
+correctly on this project, and specifically that it applies what it has
+learned. Evals exist to catch two kinds of regression:
+1. Precision regression — the agent starts making a mistake it used to
+   avoid (e.g. running an unverified command, editing a forbidden file).
+2. Learning regression — a promoted rule (Status: active in
+   learned-rules.md) stops being followed.
+
+When to run these:
+- After any change to the adapter (project-profile.md, learned-rules.md,
+  command-map.md) or to skills/agents that shape behavior.
+- Immediately after promoting a candidate rule to active, to confirm the
+  agent now follows it.
+- Periodically (e.g. weekly, or before a release) as a regression check.
+
+This file starts with no evals. Add one per rule or per recurring
+failure that is important enough to verify automatically or by hand.
+-->
+
+## Evals
+
+<!--
+Eval format (do not deviate):
+
+## Eval: <name>
+
+Task:
+- <what the agent should do>
+
+Expected files to inspect:
+- <files>
+
+Expected behavior:
+- <behavior>
+
+Forbidden behavior:
+- <behavior>
+
+Pass criteria:
+- <criteria>
+
+Validation command:
+- <command>
+
+Learning check:
+- Which learned rule should be used?
+- Which failure should not recur?
+-->
+
+<!--
+Example (delete me):
+
+## Eval: Payments integration test uses the sandbox, not a mock
+
+Task:
+- Ask the agent to add a small change to the refund flow and verify it.
+
+Expected files to inspect:
+- tests/integration/payments/refund.test.ts
+- .agent-os/learned-rules.md
+
+Expected behavior:
+- The agent runs the integration test suite against the sandbox API and
+  reports the real result.
+
+Forbidden behavior:
+- Introducing or reusing a mock/stub for the payments gateway in this
+  test directory.
+
+Pass criteria:
+- Test run output shows a request to the sandbox host; no
+  unittest.mock/jest.mock usage added for the payments client.
+
+Validation command:
+- npm run test:integration -- payments
+
+Learning check:
+- Which learned rule should be used? "Never mock the payments gateway in
+  integration tests" (learned-rules.md, Status: active).
+- Which failure should not recur? failure-log.md, 2026-01-14 entry.
+-->
+
+## Results
+
+<!--
+Record every eval run here, pass or fail, so drift over time is visible.
+-->
+
+| Date | Eval | Model | Pass/Fail | Notes |
+|------|------|-------|-----------|-------|
+
+<!--
+Example row (delete me):
+| 2026-03-10 | Payments integration test uses the sandbox, not a mock | claude-sonnet-5 | Pass | Ran clean, sandbox host confirmed in logs |
+-->

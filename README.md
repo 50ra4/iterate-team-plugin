@@ -9,11 +9,12 @@ iterate-team-plugin/
 ├── .claude-plugin/
 │   ├── plugin.json        # プラグイン manifest（hooks 登録含む）
 │   └── marketplace.json   # 単一プラグインのマーケットプレイス定義
-├── commands/              # /iterate-team /iterate-plan /iterate-build /iterate-review
+├── commands/              # /iterate-team /iterate-plan /iterate-build /iterate-review /iterate-adapt
 ├── agents/                # team-* subagent 定義（生成物・手編集禁止）
 ├── templates/             # agents の生成元（_base/ + _partials/）と build 仕様
 ├── operations/            # 運用 runbook・スキーマ・障害対応
 ├── scripts/               # build-agents / session-start / runlog / worktree / state-prune ほか
+├── vendor/agent-os/       # fable Agent OS の vendored エンジン（手編集禁止。UPSTREAM.md 参照）
 ├── assets/                # notify.wav（回答待ち通知音）
 ├── bin/cli.mjs            # 登録ヘルパ CLI（npm 経路）
 ├── settings.sample.json   # 対象リポへマージする権限サンプル
@@ -73,11 +74,20 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 /iterate-plan  <要望文>                       # 計画フェーズのみ（session-id を発行）
 /iterate-build --session <session-id>         # 実装フェーズ
 /iterate-review --session <session-id>        # レビュー / PR Ready 化フェーズ
+/iterate-adapt                                # .agent-os/ プロジェクト適応レイヤの初期化・再観測
 ```
 
 ## knowledge（クロスセッション自己学習）
 
 各 run の完了直前（ステップ 6.7）に軽量レトロスペクティブ（`team-retrospector`、`mode=light`）が自動実行され、当該セッションの runlog から教訓（lesson）を抽出して `.iterate-team/knowledge/` へ永続化する。正本 `lessons.jsonl` は git-tracked（commit 対象）だが、注入用ダイジェスト `lessons.md` は git 管理外の生成物であり、`lessons.jsonl` からセッション開始時（SessionStart hook）や記録直後に自動再生成される。記録された教訓は次回以降のセッションで `team-planner` / `team-generator` / `team-evaluator` / `team-interviewer` / `team-test-coder` の起動プロンプトへこのダイジェスト（`lessons.md`）として自動注入される。軽量レトロのコミットは同一 PR に含まれるため、レビュー時に教訓の追加内容もあわせて確認できる。複数セッションを横断した重複統合・減衰・プラグイン改善提案の棚卸しは `/iterate-retrospect`（deep レトロスペクティブ）で行う。確定値・スキーマの正本は [`operations/knowledge-policy.md`](./operations/knowledge-policy.md) を参照。
+
+## 適応アダプタ（`.agent-os/`）
+
+`iterate-team` は 2 つの直交する学習軸を並行して持つ。`.iterate-team/knowledge/`（上記）が「**ハーネスの回し方をどう良くするか**」という内部オーケストレーション軸なのに対し、`.agent-os/` は「**対象プロジェクトについての事実**」と「**ユーザーの恒常的な訂正**」という軸を扱う。両者は統合せず、物理的・手続き的に分離した別ストアとして扱う。
+
+`/iterate-adapt` を実行すると、対象リポジトリ**直下**（`.iterate-team/` 配下ではない）に `.agent-os/` が構築される。検証済み build/test/lint/typecheck/run コマンド（出典付き）・危険領域・アーキテクチャ境界を記録する事実ファイル群を `team-profiler` が観測して生成し、ユーザーからの訂正・失敗の教訓は `learned-rules.md` に `Status: candidate → active → deprecated` の 3 段階で記録される（同趣旨の訂正が 2 回以上観測されると `candidate` から `active` に昇格し、以後の起動プロンプトへ拘束力を持って注入される）。`.agent-os/` は対象リポの通常ソースと同じ **git-tracked** な資産としてコミットされ、ユーザー自身が直接読み・手編集してよい。
+
+確定値・スキーマ・注入規約の正本は [`operations/adapter-policy.md`](./operations/adapter-policy.md) を参照。
 
 ## 仕組み（パス規約）
 

@@ -46,6 +46,36 @@ agent 側の適用規則（対象セクションの限定・タスク仕様と�
 
 > **team 固有**: knowledge への書き込み主体はステップ 6.7（軽量レトロスペクティブ）と `/iterate-retrospect`（deep レトロスペクティブ）の `team-retrospector` のみに限定される。詳細は `iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ` を参照。
 
+## adapter 注入（全コマンド共通）
+
+確定値の正本は [`adapter-policy.md#5-注入規約`](./adapter-policy.md#5-注入規約)。本節は Orchestrator 側の共通手順のみを扱う。
+
+Orchestrator はステップ 0.0（session-init 取得）で `<adapter_dir>` = `<project_dir>/.agent-os` の絶対パスを in-memory 保持する。**ファイル・ディレクトリ不在でもパスは保持したまま進む**（存在チェックは行わない。注入対象 agent 側が `Read` 失敗時に黙って skip する規約のため）。`.agent-os/` は git 管理対象の生成物（`adapter-policy.md` §2）であり、`/iterate-adapt` を未実行のリポジトリでは存在しない。その場合も従来どおり注入対象 agent 側が `Read` 失敗時に黙って skip する。
+
+注入対象は knowledge ダイジェスト注入と同じ以下の 5 agent に限定する（prompt bloat 抑制）。
+
+- `team-planner`
+- `team-generator`
+- `team-evaluator`
+- `team-interviewer`
+- `team-test-coder`
+
+上記 5 agent の**すべての起動プロンプト**（初回起動・再起動・差し戻し起動を問わず）に `adapter_dir=<絶対パス>` を、`plugin_root`/`knowledge_digest_path` と同じ注入規約で含める。それ以外の agent（`team-closer` / `team-refactor` / `team-advisor-*` / `team-publisher` / `team-reviewer-*` / `team-profiler` / Codex 系等）には注入しない。
+
+agent 側の適用規則（対象ファイルの意味づけ・優先順位・`adapter_applied` の記録条件）は [`templates/_partials/adapter-injection.md`](../templates/_partials/adapter-injection.md) を参照。
+
+**代理記録の義務**: 注入対象 5 agent のうち Bash を持たない agent（`team-planner` / `team-interviewer`）は `runlog-append.sh` による `adapter_applied` の自己記録ができない。これらの agent の戻り値に `適用ルール: <rule-name>` 行が含まれる場合、Orchestrator は各 `<rule-name>` につき以下を実行して代理記録する。ただし、ルール名は knowledge の `lesson_id`（`L-...`）のような厳密な正規表現を持たない自由記述であるため、記録するのは `<rule-name>` が `<adapter_dir>/learned-rules.md`（または split 後の `rules/*.md` いずれかのファイル）内の `## Rule: <name>` 見出しと一致する場合のみとし、一致しない文字列は記録しない。agent の戻り値テキストは自由記述であり、形式不一致の文字列を `adapter_applied` として記録すると集計（適用実績の追跡）を汚染するためである:
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" adapter_applied '{"rule":"<rule-name>","agent":"<agent名>","recorded_by":"orchestrator"}'
+```
+
+**二重記録の防止**: Bash を持つ agent（`team-generator` / `team-evaluator` / `team-test-coder`）は自己記録するため、これらの戻り値の `適用ルール:` 行に対して Orchestrator は代理記録**しない**。
+
+規約の対は `templates/_partials/adapter-injection.md` §3。値の正本は [`adapter-policy.md#5-注入規約`](./adapter-policy.md#5-注入規約)。
+
+> **team 固有**: `.agent-os/` の観測・生成主体は `/iterate-adapt` の `team-profiler`（および Phase 2 の `team-adapter`）のみに限定される。詳細は `adapter-policy.md` §6 を参照。
+
 ## 引数
 
 要望文: `$ARGUMENTS`

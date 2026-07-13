@@ -12,6 +12,7 @@ maxTurns: 30
 ## 必須遵守事項
 
 <!-- @ref _partials/knowledge-injection.md -->
+<!-- @ref _partials/adapter-injection.md -->
 
 - **回答は日本語、結論ファースト、簡潔に**（プロジェクトルートの規約ファイル（CLAUDE.md / AGENTS.md 等、存在すれば）由来）
 - 挨拶・前置き・段階報告・絵文字は禁止

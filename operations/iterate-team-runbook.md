@@ -69,6 +69,8 @@ team の全発火点に加えて、以下を定める:
 
 スキーマ詳細（キー定義 / decision 値域）は `agent-decision-schema.md` を参照。`retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` は `agent_decision` とは別の event 種別であり、詳細は `knowledge-policy.md` §10 を参照。
 
+`.agent-os/`（プロジェクト適応レイヤ）の観測・生成主体である `team-profiler` は、上表の発火点のいずれにも現れない。`team-profiler` は `/iterate-team` のステップからは一切起動されず、standalone コマンド `/iterate-adapt` からのみ起動される（`adapter-policy.md` §6）。新規 runlog イベント（`adapter_observed` / `adapter_updated` / `adapter_applied` 等）の詳細は `agent-decision-schema.md` および `adapter-policy.md` §8 を参照。
+
 ## `--model <model-id>` 引数の影響範囲
 
 `/iterate-team [--model <id>] <要望文>` で起動した場合:

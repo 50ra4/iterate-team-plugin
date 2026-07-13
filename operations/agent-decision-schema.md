@@ -10,7 +10,7 @@
 
 | キー         | 必須 | 値域 / 説明                                                                                                                                                                                                              |
 | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agent`      | 必須 | 対象 Agent 名（`researcher` / `debugger` / `tracer` / `advisor-architect` / `advisor-ui-ux` / `advisor-security` / `advisor-tech-lead` / `evaluator` / `codex-plan-review` / `codex-code-review` / `team-publisher` / `team-retrospector` 等） |
+| `agent`      | 必須 | 対象 Agent 名（`researcher` / `debugger` / `tracer` / `advisor-architect` / `advisor-ui-ux` / `advisor-security` / `advisor-tech-lead` / `evaluator` / `codex-plan-review` / `codex-code-review` / `team-publisher` / `team-retrospector` / `team-profiler`（Phase 1・`.agent-os/` 観測、`/iterate-adapt` から起動） / `team-adapter`（Phase 2・`.agent-os/` 学習、未実装） 等） |
 | `decision`   | 必須 | `invoked` / `skipped` / `adopted` / `rejected` のいずれか（4 種のみ許容）                                                                                                                                                |
 | `reason`     | 必須 | 自然文 1〜2 行。スキップ時は必須記録                                                                                                                                                                                     |
 | `task_id`    | 任意 | タスクループ内発火時のみ（例: `task-1_2_3` / `plan-review` / `planner-loop`）                                                                                                                                            |
@@ -86,6 +86,8 @@
 > **TDD 関連の追加 runlog イベント**（`agent_decision` とは別の event 種別）: `test_first_red_committed` / `test_first_skipped`（5.1.5）、`refactor_committed` / `refactor_noop` / `refactor_failed`（5.2.5）。`refactor_failed` は fail closed で 5.4 NG 経路に連携する（20260526 ADR 事項7）。いずれも `<plugin_root>/scripts/runlog-append.sh` 経由で追記する。
 
 > **knowledge 関連の追加 runlog イベント**（`agent_decision` とは別の event 種別、ステップ 6.7 / `/iterate-retrospect`）: `retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` の 6 種。`retrospective_failed` はステップ 6.7 の fail-open 時に記録され、`agent_decision` の追加発行は伴わない（ステップ 9 のエスカレーションにも遷移しない、ハーネス唯一の fail-open ステップ）。detail フィールドの構成例（`lesson_id` キーを正とする）は [`knowledge-policy.md` §10](./knowledge-policy.md#10-runlog-イベント) を正本として参照する。いずれのイベントも `<plugin_root>/scripts/runlog-append.sh` 経由で追記する。
+
+> **adapter 関連の追加 runlog イベント**（`agent_decision` とは別の event 種別、`.agent-os/` プロジェクト適応レイヤ）: 8 種のうち **Phase 1**（`/iterate-adapt` + 5 agent 注入配線で使用）は `adapter_observed`（`team-profiler` の初回観測完了時、自己記録） / `adapter_updated`（`team-profiler`/`team-adapter` による再観測・更新時、`/iterate-adapt` の Orchestrator がコミット成功時に記録） / `adapter_applied`（5 injected agent の自己記録、または Bash を持たない agent の戻り値を Orchestrator が代理記録）の 3 種。**Phase 2**（`team-adapter` によるフィードバック捕捉・learned-rules 昇格ループ、本書時点で未実装）は `feedback_recorded` / `rule_candidate_recorded` / `rule_promoted` / `rule_deprecated` / `adapter_conflict` の 5 種。detail フィールドの構成例は [`adapter-policy.md` §8](./adapter-policy.md#8-runlog-イベント) を正本として参照する。いずれのイベントも `<plugin_root>/scripts/runlog-append.sh` 経由で追記する。
 
 ---
 

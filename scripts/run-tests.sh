@@ -35,3 +35,14 @@ fi
 
 echo ""
 echo "all ${#tests[@]} shell unit test file(s) passed."
+
+# Vendored Agent OS self-validation: detects a structurally broken/corrupted
+# vendor/agent-os/ tree (see vendor/agent-os/UPSTREAM.md — do not hand-edit
+# that tree; re-vendor from upstream instead).
+echo ""
+echo "== vendor/agent-os/scripts/validate-agent-os.sh =="
+if ! bash "${ROOT}/vendor/agent-os/scripts/validate-agent-os.sh"; then
+  echo "" >&2
+  echo "vendored agent-os tree failed self-validation." >&2
+  exit 1
+fi
