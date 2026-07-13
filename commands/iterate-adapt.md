@@ -108,8 +108,9 @@ argument-hint: [--no-push] [--reset-adapter]
 
 team-profiler の異常終了、またはステップ 5 のコミット失敗時は以下を行う。本コマンドの失敗によってユーザー作業を止めないため、エスカレーションは行わない:
 
-1. `.agent-os/` を `Bash <plugin_root>/scripts/adapter-recover.sh "<adapt-session-id>"` で復旧する（`knowledge-recover.sh` と同型構造の fail-open スクリプト。**Phase 2 で新規追加予定であり、本コマンド作成時点では未実装**。`adapter-policy.md` §7 参照）。**未実装の間の代替手順**: `Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` で元ブランチへ戻り、作業ツリーを clean に戻して処理を中止する（`<adapt-branch>` は削除せずローカルに残し、事後調査可能にする）
-2. 失敗理由をユーザーへ報告して終了する
+1. **（主経路）** `.agent-os/` を `Bash <plugin_root>/scripts/adapter-recover.sh "<adapt-session-id>"` で復旧する（`knowledge-recover.sh` と同型構造の fail-open スクリプト。Phase 2 で追加済み。`adapter-policy.md` §7 参照）。tracked 差分を HEAD へ復元し、残る untracked 生成物を `.iterate-team/state/<adapt-session-id>/failed-adapter/` へ退避して作業ツリーを clean に戻す（`git clean` は使わない）。exit 0 で復旧成功
+2. **（フォールバック）** `adapter-recover.sh` 自体が非 0 終了した場合のみ: `Bash <plugin_root>/scripts/git-switch-branch.sh "<original-branch>"` で元ブランチへ戻り、作業ツリーの復旧は行わず処理を中止する（`<adapt-branch>` は削除せずローカルに残し、事後調査可能にする）
+3. 失敗理由（`adapter-recover.sh` の診断出力を含む）をユーザーへ報告して終了する
 
 ## 引数
 

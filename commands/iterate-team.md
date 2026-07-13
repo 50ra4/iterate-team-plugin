@@ -20,6 +20,7 @@ iterate-team は **agent team（並列実行）ハーネス**であり、4 軸�
 - **メイン worktree の `task-x_y_z.md` 本文を Read しない**（不変条件継承）
 - 並列度上限 `team_max_parallel = 4`
 - **Draft PR の作成は同一 session 内で 1 回のみ**（再走行時は本文更新）
+- **フィードバック捕捉（Phase 2）**: ステップ 2.5 / 4 に加え、レビューフェーズ（ステップ 6 以降）でユーザーが自由記述で訂正・是正指示を行った場合も `source=review` として [`harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通`](<plugin_root>/operations/harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通) の手順でステージングする。学習（`.agent-os/` への実書き込み）はステップ 6.8 の `team-adapter` のみが行う
 
 ## ステップ 0: 環境ガード（preflight）
 
@@ -75,6 +76,8 @@ iterate-team は **agent team（並列実行）ハーネス**であり、4 軸�
 - `type=paused`: `resume_path` 存在確認 → resume コマンドを案内して終了
 - それ以外: ステップ 9
 
+**フィードバック捕捉（Phase 2）**: `AskUserQuestion` の回答がユーザー自身の言葉による訂正・恒常的な好みを含む場合、`source=interviewer` として [`harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通`](<plugin_root>/operations/harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通) の手順でステージングする（`.agent-os/` への直接書き込みは行わない。学習はステップ 6.8 で行う）。
+
 詳細: [`iterate-team-runbook.md#ステップ-25-要件壁打ちteam-interviewer-ループ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-25-要件壁打ちteam-interviewer-ループ)
 
 ## ステップ 3: Planner 起動と研究ループ
@@ -105,8 +108,8 @@ Planner 出力コミット後、ユーザー承認前に 24 観点で計画整�
 
 - **`<is_dev_container>=true`（dev container）**: ここで `AskUserQuestion`「上記の計画で実行しますか？」（`承認` / `修正` / `却下`）を行う（Draft PR を作れないため計画承認をここで取得）。
   - **承認**: `Bash git status --porcelain -- .iterate-team/tasks/<yyyyMMdd_topic-slug>/` で未コミット差分を確認 → 差分あり（Planner 自動修正後のコミット漏れ等）なら「承認時補正」コミット発行（`git add` 個別指定、subject `docs: <topic-slug> の実装計画 承認時補正`、フッタ `Refs: plan-<topic-slug>`）→ runlog `plan_approved` 追記（`plan_approved=true`）後、ステップ 4.5 へ
-  - **修正**: `plan_review_round = 0` リセット（**ユーザー修正フロー起動時の 0 初期化。これが 3.5 入口以外で唯一 0 リセットを行うタイミング**）→ team-planner 再起動 → plan ファイル上書き Write → ステップ 3.2 パターン B から再走行（`plan_revision += 1`）→ 3.5 → 4 を再度実行
-  - **却下**: runlog `rejected` 追記して終了。**初稿コミットは残す**
+  - **修正**: `plan_review_round = 0` リセット（**ユーザー修正フロー起動時の 0 初期化。これが 3.5 入口以外で唯一 0 リセットを行うタイミング**）→ team-planner 再起動 → plan ファイル上書き Write → ステップ 3.2 パターン B から再走行（`plan_revision += 1`）→ 3.5 → 4 を再度実行（修正点テキストに訂正が含まれる場合は `source=plan-approval` として [`harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通`](<plugin_root>/operations/harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通) の手順でステージングする）
+  - **却下**: runlog `rejected` 追記して終了。**初稿コミットは残す**（却下理由に訂正が含まれる場合も `source=plan-approval` として同様にステージングする）
 - **`<is_dev_container>=false`（host/Web）**: `AskUserQuestion` は **出さず** `plan-summary.md` 提示のみ。runlog `plan_presented` 追記（`plan_approved=false`）後、ステップ 4.5 へ（承認は 4.5.A で取得）。
 
 ステップ 4 完了 `step_checkpoint` には `plan_approved`(bool) を必ず含める。詳細: [`harness-common.md#ステップ-4-計画承認-askuserquestion`](<plugin_root>/operations/harness-common.md#ステップ-4-計画承認askuserquestion)
@@ -195,6 +198,22 @@ closer 完了後、push 前に `<integration-branch>` 上で自己改善ルー�
 
 詳細: [`iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ)
 
+## ステップ 6.8: adapter 学習（team-adapter、mode=feedback）【iterate-team 新規】
+
+ステップ 6.7 完了後、ステップ 7（PR Ready 化）の前に `team-adapter` を `mode=feedback` で起動し、本セッション中にステージングされた `.iterate-team/state/<session-id>/pending-feedback/` の逐語訂正とセッションの失敗を `.agent-os/` の Learning Layer（`review-feedback-log.md` / `failure-log.md` / `learned-rules.md` / `evals.md`）へ記録する。`.agent-os/` への書き込み主体は `team-profiler`（観測、`/iterate-adapt` 専用）と `team-adapter`（学習、本ステップ）の 2 agent のみに限定される（`adapter-policy.md` §6）。
+
+**ステップ 6.7 とは別の直列ステップ・別コミット・別 `Refs:`**（`Refs: adapter-learn-<session-id>`）として実行し、knowledge（6.7）と adapter（6.8）の fail-open 復旧を衝突させない。実行順序は **6.7 → 6.8** 固定。
+
+1. `pending-feedback/*.txt`（+ `.context`）が 0 件かつセッション失敗シグナルも無い場合は skip（空コミットを作らない）
+2. ステージング済みファイルから `pending_feedback` 配列を構築し `Agent subagent_type: team-adapter`（`plugin_root` / `session_id` / `adapter_dir` / `mode=feedback` / `topic_slug` / `pending_feedback`）を起動
+3. 戻り値 JSON（`new_candidates` / `promoted` / `deprecated` / `conflicts`）を検証 → `.agent-os/` 差分を個別 `git add`（`git add -A` / `git add .` 禁止）→ 1 コミット（subject `docs: .agent-os 学習更新`、フッタ `Refs: adapter-learn-<session-id>`）
+4. host はステップ 6.6/6.7 と同じ push にコミットを含める。dev container は push skip
+5. runlog `adapter_updated` を追記 → `pending-feedback/` をクリア → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ
+
+**fail-open**: `team-adapter` 起動失敗 / 戻り値不正 / コミット失敗時は `Bash <plugin_root>/scripts/adapter-recover.sh "<session-id>"` で復旧し、ステップ 9 へは遷移せずステップ 7 へ続行する（6.7 と並ぶ、失敗時にエスカレーションしないステップ）。`pending-feedback/` はこの場合クリアしない。push のみの失敗は対象外でステップ 9 へ遷移する。
+
+詳細: [`iterate-team-runbook.md#ステップ-68-adapter-学習`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-68-adapter-学習)
+
 ## ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
 `<is_dev_container>=true` → skip してステップ 7' へ（runlog `ready_skipped`）。`<is_dev_container>=false` → Draft 解除（Ready 化）→ runlog `pr_marked_ready` → 完了タスク数 / 試行回数 / PR URL / 記録レッスン数・プラグイン改善提案の有無を報告。
@@ -240,6 +259,9 @@ closer 完了後、push 前に `<integration-branch>` 上で自己改善ルー�
 - **knowledge への書き込みはステップ 6.7 と `/iterate-retrospect` のみ**（他ステップで書くと tracked ファイルの dirty 化により後続 git 操作を汚染するため禁止）
 - **ステップ 6.7 は fail-open**（agent 失敗・戻り値不正・コミット失敗のいずれでもステップ 9 へ遷移せずステップ 7 へ続行する、ハーネス唯一のステップ）
 - light モード（ステップ 6.7）の記録上限（新規レッスン最大 3 件・プラグイン改善提案最大 1 件）は `knowledge-policy.md` §5 を正本とする
+- **`.agent-os/` への学習書き込みはステップ 6.8 の `team-adapter`（`mode=feedback`）のみ**（`team-profiler` は `/iterate-adapt` 専用の観測書き手、5 injected agent は read-only consumer。`adapter-policy.md` §6）。Orchestrator は捕捉（2.5 / 4）時も学習（6.8）時も `.agent-os/` を直接 `Write`/`Edit` しない（捕捉は `.iterate-team/state/<session-id>/pending-feedback/` へのステージングのみ）
+- **ステップ 6.8 はステップ 6.7 と別の直列ステップ・別コミット・別 `Refs:`**（`Refs: adapter-learn-<session-id>`）。実行順序は 6.7 → 6.8 固定で、knowledge と adapter の fail-open 復旧を衝突させない
+- **ステップ 6.8 も fail-open**（`team-adapter` 失敗・戻り値不正・コミット失敗のいずれでもステップ 9 へ遷移せずステップ 7 へ続行する、6.7 と並ぶステップ）
 
 状態保持変数の用途と初期化タイミングは [`iterate-team-runbook.md#orchestrator-状態保持変数team`](<plugin_root>/operations/iterate-team-runbook.md#orchestrator-状態保持変数team) を参照。
 

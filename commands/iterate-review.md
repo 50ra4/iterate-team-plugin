@@ -5,7 +5,7 @@ argument-hint: --session <session-id> [--model <id>] [--resume-checkpoint <sessi
 
 # /iterate-review
 
-あなたは iterate-review ハーネスの **Orchestrator** である。本コマンドの担当ステップ範囲は既存 `/iterate-team` の **ステップ 6〜7'** のみ（closer 委譲 / 自己改善ループ / post-push / PR Ready 化 / dev container 完了案内）。ステップ 0〜5（環境ガード〜wave 並列タスクループ）は本コマンドの範囲外であり、`/iterate-build` が担当する。
+あなたは iterate-review ハーネスの **Orchestrator** である。本コマンドの担当ステップ範囲は既存 `/iterate-team` の **ステップ 6〜7'** のみ（closer 委譲 / 自己改善ループ / post-push / PR Ready 化 / adapter 学習 / dev container 完了案内）。ステップ 0〜5（環境ガード〜wave 並列タスクループ）は本コマンドの範囲外であり、`/iterate-build` が担当する。
 
 ## 必須遵守事項
 
@@ -15,6 +15,7 @@ argument-hint: --session <session-id> [--model <id>] [--resume-checkpoint <sessi
 - **`git push` の直接呼び出し禁止**。push は `team-publisher` Agent 経由のみ（内部で `<plugin_root>/scripts/team-push-branch.sh` ラッパー）
 - **`/simplify` / `/security-review` は Orchestrator メインセッションが `Skill` ツール経由で呼び出す**（team-\* subagent は `Skill` 非付与設計のため呼び出せない）
 - **PR 作成 / 本文更新 / Ready 化は Orchestrator が実行環境で利用可能な手段を選択**（team-publisher は push 専任）
+- **フィードバック捕捉（Phase 2）**: 本コマンド実行中にユーザーが自由記述で訂正・是正指示を行った場合、`source=review` として [`harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通`](<plugin_root>/operations/harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通) の手順でステージングする（`.agent-os/` への直接書き込みは行わない）。ステージング済みの内容はステップ 6.8 で `team-adapter` が学習する
 
 ## 引数処理
 
@@ -41,7 +42,7 @@ Usage: /iterate-review --session <session-id> [--model <id>] [--resume-checkpoin
 
 ### `--resume-checkpoint <session-id>` 引数の処理
 
-`--resume-checkpoint <session-id>` で起動された場合、checkpoint payload の `next_step` を確認する。担当範囲の判定は数値・文字列双方を許容して行い（後方互換: 旧 runlog は数値で書き込まれている場合がある）、[`iterate-team-runbook.md` の分岐表](<plugin_root>/operations/iterate-team-runbook.md#next_step-値域と担当コマンドの分岐表)を SSOT とする。文字列専用識別子（`"3.5-replan"` 等）は数値表現が存在しないため文字列照合を維持する。本コマンド担当値（`6` / `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"`）以外のとき、処理中止し担当コマンドを案内する（`"6.7"` 追加前の旧 checkpoint は `next_step:"7"` のまま記録されているため、旧 checkpoint からの resume も従来どおり本コマンド担当範囲として扱われ後方互換を維持する）:
+`--resume-checkpoint <session-id>` で起動された場合、checkpoint payload の `next_step` を確認する。担当範囲の判定は数値・文字列双方を許容して行い（後方互換: 旧 runlog は数値で書き込まれている場合がある）、[`iterate-team-runbook.md` の分岐表](<plugin_root>/operations/iterate-team-runbook.md#next_step-値域と担当コマンドの分岐表)を SSOT とする。文字列専用識別子（`"3.5-replan"` 等）は数値表現が存在しないため文字列照合を維持する。本コマンド担当値（`6` / `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"6.8"` / `"7"` / `"7'"`）以外のとき、処理中止し担当コマンドを案内する（`"6.7"` / `"6.8"` 追加前の旧 checkpoint は `next_step:"7"` のまま記録されているため、旧 checkpoint からの resume も従来どおり本コマンド担当範囲として扱われ後方互換を維持する）:
 
 - `next_step` が `/iterate-plan` 担当値（`"2.5"` / `"3"` / `"3.2"` / `"3.5"` / `"3.5-replan"` / `"4"`）:
 
@@ -161,6 +162,22 @@ blocker が無ければステップ 6.6 へ。blocker があれば `self_improve
 
 詳細: [`iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-67-軽量レトロスペクティブ)
 
+## ステップ 6.8: adapter 学習（team-adapter、mode=feedback）
+
+ステップ 6.7 完了後、ステップ 7（PR Ready 化）の前に `team-adapter` を `mode=feedback` で起動し、本セッション中にステージングされた `.iterate-team/state/<session-id>/pending-feedback/` の逐語訂正とセッションの失敗を `.agent-os/` の Learning Layer（`review-feedback-log.md` / `failure-log.md` / `learned-rules.md` / `evals.md`）へ記録する。`.agent-os/` への書き込み主体は `team-profiler`（観測、`/iterate-adapt` 専用）と `team-adapter`（学習、本ステップ）の 2 agent のみに限定される（`adapter-policy.md` §6）。
+
+**ステップ 6.7 との分離**: 本ステップは knowledge（`.iterate-team/knowledge/`）を扱う 6.7 とは**別の直列ステップ・別コミット・別 `Refs:`**（`Refs: adapter-learn-<session-id>`）として実行する。実行順序は **6.7（knowledge）→ 6.8（adapter）** に固定し、両者の fail-open 復旧を衝突させない（`adapter-policy.md` の「既存 knowledge 機構との衝突リスク」参照）。
+
+1. `pending-feedback/*.txt`（+ `.context` サイドカー）が 0 件かつセッション失敗シグナルも無い場合は本ステップを skip（空コミットを作らない）
+2. ステージング済みファイルから `pending_feedback` 配列（`[{"text","context","source"}]`）を構築し、`Agent subagent_type: team-adapter` を `plugin_root` / `session_id` / `adapter_dir` / `mode=feedback` / `topic_slug` / `pending_feedback` で起動
+3. 戻り値 JSON（`new_candidates` / `promoted` / `deprecated` / `conflicts`）を検証 → `.agent-os/` 差分を**個別 `git add`**（`git add -A` / `git add .` 禁止）→ 1 コミット（subject `docs: .agent-os 学習更新`、フッタ `Refs: adapter-learn-<session-id>`）
+4. host はステップ 6.6/6.7 と同じ push にコミットを含める。dev container は push skip（7' の案内に含まれる）
+5. runlog `adapter_updated` を追記 → `pending-feedback/` をクリア → `step_checkpoint`（`next_step:"7"`）を追記 → ステップ 7 へ
+
+**fail-open**: `team-adapter` 起動失敗 / 戻り値不正 / コミット失敗時は `Bash <plugin_root>/scripts/adapter-recover.sh "<session-id>"` で復旧し、ステップ 9 へは遷移せずステップ 7 へ続行する（6.7 と並ぶ、ハーネス内で失敗時にエスカレーションしないステップ）。この場合 `pending-feedback/` はクリアしない。push のみの失敗は対象外でステップ 9 へ遷移する。
+
+詳細: [`iterate-team-runbook.md#ステップ-68-adapter-学習`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-68-adapter-学習)
+
 ## ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
 `<is_dev_container>=true` の場合、本ステップを skip してステップ 7' へ（runlog `ready_skipped`）。
@@ -182,6 +199,7 @@ blocker が無ければステップ 6.6 へ。blocker があれば `self_improve
 | 6.5 自己改善ループ        | 実行（`/simplify` + `/security-review`、push なし） | 実行（同上）     |
 | 6.6 実装後 push           | 実行                                                | skip             |
 | 6.7 軽量レトロ            | 実行（commit + push）                               | 実行（commit のみ） |
+| 6.8 adapter 学習          | 実行（空スキップあり、commit + push、fail-open）     | 実行（同左、commit のみ、fail-open） |
 | 7 PR Ready 化             | 実行                                                | skip             |
 | 7' dev container 完了案内 | skip                                                | 実行             |
 

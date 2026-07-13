@@ -75,6 +75,15 @@
       "Bash(<PLUGIN_ROOT>/scripts/adapter-bootstrap.sh *)",
       "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/validate-agent-os.sh *)",
       "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/detect-rule-conflicts.sh *)",
+      // Phase 2（フィードバック捕捉 + learned-rules ループ）: team-adapter が
+      // review-feedback-log.md へ flock 安全に逐語 1 件 append する経路
+      // （adapter-record-feedback.sh）と、.agent-os/ のコミット失敗時に fail-open 復旧する経路
+      // （adapter-recover.sh、knowledge-recover.sh 構造クローン）。split-learned-rules.sh は
+      // team-adapter の mode=adapt が --dry-run（提案のみ、本実行はしない）で呼ぶ fable 由来
+      // vendored スクリプト。
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-record-feedback.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-recover.sh *)",
+      "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/split-learned-rules.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",

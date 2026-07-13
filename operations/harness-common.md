@@ -76,6 +76,35 @@ agent 側の適用規則（対象ファイルの意味づけ・優先順位・`a
 
 > **team 固有**: `.agent-os/` の観測・生成主体は `/iterate-adapt` の `team-profiler`（および Phase 2 の `team-adapter`）のみに限定される。詳細は `adapter-policy.md` §6 を参照。
 
+## フィードバック捕捉ステージング（capture、全コマンド共通）
+
+確定値の正本は [`adapter-policy.md#6-書き手隔離`](./adapter-policy.md#6-書き手隔離)（`.agent-os/` への書き込み主体は `team-profiler`/`team-adapter` の 2 agent のみ）と `adapter-policy.md` §7（コミット・push フロー / fail-open）。本節は Orchestrator 側の **捕捉（capture）** 手順のみを扱う。捕捉と学習（learn）は物理的に分離されたステップである: `/iterate-plan` → `/iterate-build` → `/iterate-review` は `--session` で引き継がれる別プロセス起動のため、捕捉時点で `.agent-os/` へ直接書き込むことはできない。学習（`.agent-os/` への実書き込み）は `/iterate-review` の直列ステップ（ステップ 6.8。詳細は [`iterate-team-runbook.md#ステップ-68-adapter-学習`](./iterate-team-runbook.md#ステップ-68-adapter-学習)）でのみ行う。
+
+**§6 遵守（重要）**: Orchestrator は捕捉時点で `.agent-os/` を一切 `Write`/`Edit` しない。捕捉したテキストは git 除外の `.iterate-team/state/<session-id>/pending-feedback/` へ一時ステージングするのみである。
+
+### ステージング先とファイル命名
+
+- ディレクトリ: `.iterate-team/state/<session-id>/pending-feedback/`（`.iterate-team/state/` 配下のため git 除外・既存の `Write(.iterate-team/state/*/**)` 許可でカバーされる。新規権限は不要）
+- 1 訂正につき 1 ファイル: `<seq>-<source>.txt`（`<seq>` はゼロ埋め連番、例 `001` / `002`。`<source>` は `interviewer` | `plan-approval` | `review` のいずれか）
+- 本文はユーザーの訂正テキストを**逐語のまま**（言い換えない・要約しない）格納する
+- 任意サイドカー: `<seq>-<source>.context`（1 行のタスク/PR 文脈。例: `task-1_2_3` / `PR #42`）
+
+### 捕捉ポイント
+
+1. **`team-interviewer` step 2.5**: interviewer ラウンドがユーザー自身の言葉による訂正・恒常的な好み（`AskUserQuestion` の回答文そのもの）を検知した場合、当該テキストを `source=interviewer` としてステージングする
+2. **計画承認 step 4（修正フロー）**: ユーザーの「修正」/「却下」指示に訂正内容が含まれる場合、`source=plan-approval` としてステージングする
+3. **review（`/iterate-review`）**: レビューフェーズ中にユーザーが自由記述で訂正・是正指示を行った場合（`/iterate-review` は既存の対話的承認ステップを持たないため、Orchestrator の完了報告・エスカレーション等に対するユーザーの返信を含む、任意のタイミングを指す）、`source=review` としてステージングする
+
+いずれの捕捉ポイントも Orchestrator が `Write` ツールで直接書き込む（既存の `Write(.iterate-team/state/*/**)` 許可でカバー、新規許可不要）。書き込み直後に軽量な runlog マーカーを追記する（**逐語テキストは runlog に含めない**）:
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" feedback_staged '{"source":"<interviewer|plan-approval|review>","seq":<n>}'
+```
+
+ステージングされたファイル群は `/iterate-review` ステップ 6.8 で `team-adapter`（`mode=feedback`）の入力 `pending_feedback` 配列（`[{"text":...,"context":...,"source":...}]`）に変換され、学習コミット成功後にクリアされる。手順の正本は [`iterate-team-runbook.md#ステップ-68-adapter-学習`](./iterate-team-runbook.md#ステップ-68-adapter-学習) を参照。
+
+> **team 固有**: 上記 3 捕捉ポイントの Orchestrator 手順詳細は `iterate-team-runbook.md` の該当ステップ（[ステップ 2.5](./iterate-team-runbook.md#ステップ-25-要件壁打ちteam-interviewer-ループ) / ステップ 4 修正フロー / [ステップ 6.8](./iterate-team-runbook.md#ステップ-68-adapter-学習)）を参照。
+
 ## 引数
 
 要望文: `$ARGUMENTS`
@@ -254,6 +283,8 @@ Planner が `.iterate-team/tasks/<yyyyMMdd_topic-slug>/plan.md` / `plan-summary.
 4. ステップ 3.5（計画レビュー）→ ステップ 4 を再度実行
 
 ユーザの修正点指示は Orchestrator が in-memory に保持し、次回の Planner 出力コミット body に転記する。
+
+**フィードバック捕捉（Phase 2）**: 修正点テキストに訂正・恒常的な是正が含まれる場合、上記の in-memory 保持に加えて `source=plan-approval` として [「フィードバック捕捉ステージング」節](#フィードバック捕捉ステージングcapture全コマンド共通) の手順でステージングする（`.agent-os/` への直接書き込みは行わない）。
 
 > **修正フローは 2 経路ある（Planner 側からは同一処理に集約）**:
 >

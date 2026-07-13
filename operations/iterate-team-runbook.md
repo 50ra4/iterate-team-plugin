@@ -25,6 +25,7 @@
 | 6.5 自己改善ループ        | 実行（`/simplify` + `/security-review`、push なし）                          | 実行（同上）                                                           |
 | 6.6 実装後 push           | 実行                                                                         | skip                                                                   |
 | 6.7 軽量レトロ            | 実行（commit + push）                                                       | 実行（commit のみ、fail-open）                                        |
+| 6.8 adapter 学習          | 実行（pending_feedback 空 + 失敗無しなら skip、commit + push、fail-open）  | 実行（同左、commit のみ、fail-open）                                   |
 | 7 PR Ready 化             | 実行                                                                         | skip                                                                   |
 | 7' dev container 完了案内 | skip                                                                         | 実行（host 側で `git push -u origin <branch>` + 手動 PR 作成を促す）   |
 
@@ -36,7 +37,7 @@ PR 作成 / 本文更新 / Ready 化は Orchestrator が実行環境で利用可
 
 ## 主要 runlog イベント（早見）
 
-`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `retrospective_started` / `retrospective_completed` / `retrospective_failed`（ステップ 6.7 fail-open） / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` / `escalated`
+`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `retrospective_started` / `retrospective_completed` / `retrospective_failed`（ステップ 6.7 fail-open） / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` / `feedback_staged`（capture マーカー、ステップ 2.5 / 4 / review） / `adapter_updated`（ステップ 6.8 学習コミット成功時） / `escalated`
 
 各イベントの payload 仕様は `<plugin_root>/commands/iterate-team.md` の各ステップ記述、または `<plugin_root>/scripts/runlog-append.sh` の呼び出し箇所を参照。`agent_decision` イベントの抽出:
 
@@ -66,10 +67,12 @@ team の全発火点に加えて、以下を定める:
 | ステップ 6.5.4 ループ超過                   | `skill-simplify`        | `rejected` | 「self_improve_round > 2」                               |
 | ステップ 6.6 push skip（dev container）     | `team-publisher`        | `skipped`  | 「dev container のため post_implementation push skip」   |
 | ステップ 6.7 起動時                          | `team-retrospector`     | `invoked`  | 「軽量レトロスペクティブ（mode=light）」                 |
+| ステップ 6.8 起動時（pending_feedback 非空 or 失敗検出）| `team-adapter`  | `invoked`  | 「フィードバック学習（mode=feedback）」                  |
+| ステップ 6.8 skip 時（pending_feedback 空 + 失敗無し）  | `team-adapter`  | `skipped`  | 「pending_feedback 空 + セッション失敗無し」             |
 
 スキーマ詳細（キー定義 / decision 値域）は `agent-decision-schema.md` を参照。`retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` は `agent_decision` とは別の event 種別であり、詳細は `knowledge-policy.md` §10 を参照。
 
-`.agent-os/`（プロジェクト適応レイヤ）の観測・生成主体である `team-profiler` は、上表の発火点のいずれにも現れない。`team-profiler` は `/iterate-team` のステップからは一切起動されず、standalone コマンド `/iterate-adapt` からのみ起動される（`adapter-policy.md` §6）。新規 runlog イベント（`adapter_observed` / `adapter_updated` / `adapter_applied` 等）の詳細は `agent-decision-schema.md` および `adapter-policy.md` §8 を参照。
+`.agent-os/`（プロジェクト適応レイヤ）の観測主体である `team-profiler` は、上表の発火点のいずれにも現れない。`team-profiler` は `/iterate-team` のステップからは一切起動されず、standalone コマンド `/iterate-adapt` からのみ起動される（`adapter-policy.md` §6）。一方 **学習主体の `team-adapter`（Phase 2）はステップ 6.8（上表参照）から `mode=feedback` で起動される**。新規 runlog イベント（`adapter_observed` / `adapter_updated` / `adapter_applied` / `feedback_recorded` / `rule_candidate_recorded` / `rule_promoted` / `rule_deprecated` / `adapter_conflict` / `feedback_staged`（capture マーカー、Phase 2 新規） 等）の詳細は `agent-decision-schema.md` および `adapter-policy.md` §8 を参照。
 
 ## `--model <model-id>` 引数の影響範囲
 
@@ -168,6 +171,7 @@ runlog: .iterate-team/state/<session-id>/runlog.jsonl
 | 6.5      | [ステップ 6.5: 自己改善ループ（Skill: /simplify → /security-review）](#ステップ-65-自己改善ループskill-simplify--security-review)  |
 | 6.6      | [ステップ 6.6: 実装コミット群を remote へ push（host 環境のみ）](#ステップ-66-実装コミット群を-remote-へ-pushhost-環境のみ)        |
 | 6.7      | [ステップ 6.7: 軽量レトロスペクティブ](#ステップ-67-軽量レトロスペクティブ)                                                        |
+| 6.8      | [ステップ 6.8: adapter 学習](#ステップ-68-adapter-学習)（team-adapter、mode=feedback。6.7 とは別の直列ステップ・別コミット）        |
 | 7        | [ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）](#ステップ-7-pr-ready-化とユーザーへ一括報告host-環境のみ)           |
 | 7'       | [ステップ 7': dev container 専用 — ローカル完了報告と引き継ぎ案内](#ステップ-7-dev-container-専用--ローカル完了報告と引き継ぎ案内) |
 
@@ -233,7 +237,7 @@ session-id 形式は先頭英数字を必須とし（`-flag` 始まりの引数�
 | コマンド          | 担当 `next_step` 値域（文字列・またはその数値相当）                                                               |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `/iterate-build`  | `"4.5"` / `"5"` / `"5.0"` / `"5.1"` / `"5.2"` / `"5.3"` / `"5.4"` / `"5.5"` / `"5.6"` / `"5.7"`（数値表現も許容） |
-| `/iterate-review` | `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"`（数値表現も許容）                                            |
+| `/iterate-review` | `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"6.8"` / `"7"` / `"7'"`（数値表現も許容）                                  |
 
 範囲外の場合のエラーメッセージ形式:
 
@@ -268,7 +272,7 @@ session-id 形式は先頭英数字を必須とし（`-flag` 始まりの引数�
 | ------------------------------------------------------------------------------------------------------------------ | ----------------- | -------------------------------------------------------------------------- |
 | `"2.5"` / `"3"` / `"3.2"` / `"3.5"` / `"3.5-replan"` / `"4"` またはその数値相当                                    | `/iterate-plan`   | 担当外: 処理中止 + `/iterate-plan --resume-checkpoint <session-id>` を案内 |
 | `"4.5"` / `"5"` / `"5.0"` / `"5.1"` / `"5.2"` / `"5.3"` / `"5.4"` / `"5.5"` / `"5.6"` / `"5.7"` またはその数値相当 | `/iterate-build`  | 担当内: 該当ステップから再開                                               |
-| `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"7"` / `"7'"` またはその数値相当                                            | `/iterate-review` | 担当内: 該当ステップから再開                                               |
+| `"6"` / `"6.5"` / `"6.6"` / `"6.7"` / `"6.8"` / `"7"` / `"7'"` またはその数値相当                                  | `/iterate-review` | 担当内: 該当ステップから再開                                               |
 | 上記以外（未知値）                                                                                                 | —                 | abort + 「未知の next_step 値: <value>」エラーを返して処理中止             |
 
 担当外の場合の処理中止メッセージ形式:
@@ -446,6 +450,8 @@ runlog 追記: `runtime_detected` / `{is_dev_container, mcp_profile}`（`--model
 - `type=done`: `summary_path` 存在確認後、ステップ 3 へ
 - `type=paused`: `resume_path` 存在確認後、resume コマンドを案内して終了
 - それ以外: ステップ 9
+
+> **フィードバック捕捉（Phase 2）**: `AskUserQuestion` の回答がユーザー自身の言葉による訂正・恒常的な好みを含む場合、`responses/interview-round-<N>.md` への Write に加えて、[`harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通`](./harness-common.md#フィードバック捕捉ステージングcapture全コマンド共通) の手順で `source=interviewer` としてステージングする（`.iterate-team/state/<session-id>/pending-feedback/` へのみ書き込み、`.agent-os/` への直接書き込みは行わない）。
 
 詳細仕様（runlog payload・必須フィールド）は subagent 名と session-id prefix が team 固有。
 
@@ -843,6 +849,59 @@ push しないと Ready PR が GitHub 上で計画コミットだけを指し、
 
 push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する（6.7.3 参照）。
 
+### ステップ 6.8: adapter 学習
+
+ステップ 6.7（軽量レトロスペクティブ）完了後、ステップ 7（PR Ready 化）の前に `team-adapter` を `mode=feedback` で起動し、本セッション中にステージングされた `pending-feedback/` の逐語訂正とセッションの失敗を `.agent-os/` の Learning Layer（`review-feedback-log.md` / `failure-log.md` / `learned-rules.md` / `evals.md`）へ記録する。`.agent-os/` への書き込み主体は `team-profiler`（観測、`/iterate-adapt` 専用）と `team-adapter`（学習、本ステップ）の 2 agent のみに限定される（`adapter-policy.md` §6）。
+
+**6.7 との分離（順序厳守）**: 本ステップは 6.7 とは**別の直列ステップ・別コミット・別 `Refs:`** として実行する。knowledge（`.iterate-team/knowledge/`）と adapter（`.agent-os/`）は物理的に独立したストアであり、両者の fail-open 復旧（`knowledge-recover.sh` / `adapter-recover.sh`）が同一コミット内で競合しないよう、実行順序は **ステップ 6.7（knowledge）→ ステップ 6.8（adapter）** に固定する（`adapter-policy.md` の「既存 knowledge 機構との衝突リスク」参照）。
+
+#### 6.8.0 起動条件（空スキップ）
+
+`Glob .iterate-team/state/<session-id>/pending-feedback/*.txt` が 0 件、かつ本セッションの runlog に未記録の失敗シグナル（`agent_decision` の `rejected` / `test_remand_*` / Evaluator NG / `escalated` 等）が無い場合、本ステップ全体を skip する（空コミットを作らない）。`<plugin_root>/scripts/runlog-agent-decision.sh "<session-id>" team-adapter skipped "pending_feedback 空 + セッション失敗無し"` を追記し、`step_checkpoint`（`next_step:"7"`）を追記してステップ 7 へ進む。
+
+#### 6.8.1 pending_feedback 配列の構築
+
+1. `Glob .iterate-team/state/<session-id>/pending-feedback/*.txt` を seq 昇順（ファイル名先頭のゼロ埋め連番）でソートして列挙する
+2. 各 `<seq>-<source>.txt` を `Read` して `text` に、対応する `<seq>-<source>.context`（存在すれば）を `Read` して `context` に格納する。`source` はファイル名の `<source>` 部分（`interviewer` / `plan-approval` / `review`）から取得する
+3. `pending_feedback = [{"text": "...", "context": "...", "source": "..."}, ...]` を in-memory 配列として構築する（逐語本文は runlog には書かない。`team-adapter` 起動プロンプトへの受け渡しのみに使う）
+
+#### 6.8.2 team-adapter 起動
+
+1. runlog `agent_decision team-adapter invoked`（reason: 「フィードバック学習（mode=feedback）」）を追記
+2. `Agent subagent_type: team-adapter` を起動。プロンプトキー: `plugin_root` / `session_id` / `adapter_dir`（`<project_dir>/.agent-os` 絶対パス） / `mode=feedback` / `topic_slug` / `pending_feedback`（6.8.1 の配列。team-adapter の既存入力契約どおり）
+3. 戻り値 JSON フェンス（`new_candidates` / `promoted` / `deprecated` / `conflicts`）を検証する。parse 失敗・必須キー欠落は 6.8.5 の fail-open へ
+
+#### 6.8.3 コミット
+
+1. `Bash git status --porcelain -- .agent-os/` で差分を確認する。差分なしの場合はコミットをスキップし 6.8.4 の runlog 記録へ進む
+2. 差分あり: 変更された `.agent-os/*` ファイルを 1 件ずつ**個別 `git add`**する（`git add -A` / `git add .` 禁止）
+3. 1 コミットにまとめる。subject `docs: .agent-os 学習更新`、フッタ `Refs: adapter-learn-<session-id>`（ステップ 6.7 の `Refs: retrospective-<session-id>` とは別系統。同一コミットに混在させない）
+4. コミット失敗（pre-commit hook reject 等、exit 非 0）は 6.8.5 の fail-open へ
+
+#### 6.8.4 push 分岐・runlog 記録・staging クリア・checkpoint
+
+1. **push 分岐**: `<is_dev_container>=false`（host）はステップ 6.6/6.7 と同じ `team-publisher`（`push_branch` / `post_implementation`）の push に本コミットを含める。`<is_dev_container>=true`（dev container）は push を skip する（本コミットはステップ 7' の手動 push 案内に自動的に含まれる）
+2. runlog `adapter_updated` / `{"files":[<changed files>],"reason":"feedback 学習（mode=feedback）"}` を追記
+3. 戻り値の `conflicts` が非空の場合、ステップ 7 の完了報告に件数・概要を含める（`team-adapter` が `adapter_conflict` を自己記録済みのため、Orchestrator 側の追加記録は不要）
+4. `Bash rm -rf .iterate-team/state/<session-id>/pending-feedback` で捕捉ステージングをクリアする（学習コミット成功後のみ実行。次回セッションでの重複記録を防ぐ）
+5. `step_checkpoint`（`next_step:"7"`）を追記
+6. ステップ 7 へ進む
+
+```bash
+<plugin_root>/scripts/runlog-append.sh "<session-id>" step_checkpoint '{"step":"6.8","topic_slug":"<topic-slug>","plan_revision":<rev>,"integration_branch":"<integration-branch>","current_task_id":null,"current_attempt":null,"completed_task_ids":[...],"wave_index":null,"completed_wave_indices":[...],"advisor_pending":false,"next_step":"7"}'
+```
+
+#### 6.8.5 fail-open
+
+`team-adapter` の起動失敗 / 戻り値 JSON parse 失敗・必須キー欠落 / `.agent-os/` コミット失敗のいずれかが発生した場合:
+
+1. `Bash <plugin_root>/scripts/adapter-recover.sh "<session-id>"` を実行する（`knowledge-recover.sh` と同型構造の fail-open 復旧。手順の正本: `adapter-policy.md` §7）
+2. `<plugin_root>/scripts/runlog-agent-decision.sh "<session-id>" team-adapter rejected "<失敗理由の要約>"` を追記する（`adapter_updated` は記録しない）
+3. **ステップ 9 へは遷移せず、ステップ 7 へ続行する**（本ステップも 6.7 と同様、ハーネス内で失敗時にエスカレーションしないステップの一つである。フィードバック学習の失敗で PR 完了を阻害しないため）
+4. `pending-feedback/` はクリアしない（学習が完了していないため、次回の `/iterate-review` 再走行や手動確認での再記録の余地を残す）
+
+push のみが失敗した場合（コミット自体は成功）は本 fail-open の対象外とし、既存の team-publisher 失敗規則（ステップ 8）に従いステップ 9 へ遷移する（6.8.4 参照）。
+
 ### ステップ 7: PR Ready 化とユーザーへ一括報告（host 環境のみ）
 
 `<is_dev_container>=true` の場合、本ステップを skip してステップ 7' へ（runlog: `ready_skipped` + `agent_decision team-publisher skipped`）。
@@ -851,7 +910,7 @@ push のみが失敗した場合（コミット自体は成功）は本 fail-ope
 
 1. Orchestrator が実行環境で利用可能な手段で `<pr-number>` の Draft 状態を解除（Ready 化）
 2. runlog: `pr_marked_ready` / `{pr_number}`
-3. 結論ファーストで報告: 完了タスク数 / 試行回数累計 / コミット一覧（`git log --grep="Refs: task-" --format="%h %s"`）/ PR URL / 記録レッスン数・プラグイン改善提案の有無（ステップ 6.7 の `retrospective_completed` payload から） / 残作業 / runlog.jsonl パス
+3. 結論ファーストで報告: 完了タスク数 / 試行回数累計 / コミット一覧（`git log --grep="Refs: task-" --format="%h %s"`）/ PR URL / 記録レッスン数・プラグイン改善提案の有無（ステップ 6.7 の `retrospective_completed` payload から） / 学習ルール候補・昇格・矛盾の有無（ステップ 6.8 の `team-adapter` 戻り値 `new_candidates`/`promoted`/`conflicts` から。ステップ 6.8 が skip された場合は「学習対象フィードバック無し」と報告） / 残作業 / runlog.jsonl パス
 
 ### ステップ 7': dev container 専用 — ローカル完了報告と引き継ぎ案内
 
@@ -928,6 +987,9 @@ runlog: `dev_container_complete` / `{integration_branch, total_tasks, total_atte
 - **モデル判定は abort ではなく `AskUserQuestion` 確認**（Sonnet 系 / unknown 通過、その他は明示確認）。`--model <id>` 指定時は skip
 - **自己改善ループ（ステップ 6.5）は最大 2 ラウンド**。`<integration-branch>` 上のみで動作、worktree 内には変更を加えない
 - **`/simplify` / `/security-review`（ステップ 6.5 自己改善ループ）は Orchestrator メインセッションが `Skill` ツール経由で呼び出す**（その他の team-\* subagent は `Skill` 非付与のため呼び出せない＝設計選択）。`team-refactor` の例外は [6.5.5 不変条件](#ステップ-65-自己改善ループskill-simplify--security-review) を参照
+- **`.agent-os/` への学習書き込みはステップ 6.8 の `team-adapter`（`mode=feedback`）のみ**（`team-profiler` は `/iterate-adapt` 専用の観測書き手、5 injected agent は read-only consumer。`adapter-policy.md` §6）。Orchestrator 自身は捕捉（2.5 / 4 / review）時も学習（6.8）時も `.agent-os/` を直接 `Write`/`Edit` しない
+- **ステップ 6.8 はステップ 6.7 と別の直列ステップ・別コミット・別 `Refs:`**（`Refs: adapter-learn-<session-id>`）とし、knowledge（6.7）と adapter（6.8）の fail-open 復旧を衝突させない。実行順序は 6.7 → 6.8 固定
+- **ステップ 6.8 も fail-open**（`team-adapter` 失敗・戻り値不正・コミット失敗のいずれでもステップ 9 へ遷移せずステップ 7 へ続行する、6.7 と並ぶハーネス唯一級のステップ）
 
 ### Orchestrator 状態保持変数（team）
 
