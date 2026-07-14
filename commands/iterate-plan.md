@@ -1,6 +1,6 @@
 ---
 description: 計画フェーズ専用ハーネス（preflight / interviewer ループ / Planner 起動 / 計画レビュー / 計画承認まで）。実装フェーズには `/iterate-build --session <session-id>` を使う。
-argument-hint: [--from-branch <branch>] [--model <id>] [--resume <path>] [--resume-checkpoint <session-id>] <要望文>
+argument-hint: [--from-branch <branch>] [--model <id>] [--adapt] [--resume <path>] [--resume-checkpoint <session-id>] <要望文>
 ---
 
 # /iterate-plan
@@ -16,12 +16,15 @@ argument-hint: [--from-branch <branch>] [--model <id>] [--resume <path>] [--resu
 - subagent_type には `team-` prefix を付ける
 - **`<plugin_root>` 解決**: SessionStart hook が注入する `<session-init>` の `plugin_root`（= init.json の plugin_root）を `<plugin_root>` として保持し、本文・operations・scripts 参照（`<plugin_root>/...`）の解決と、全 subagent 起動プロンプトへの `plugin_root=<絶対パス>` 注入に使う。ランタイム状態は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/`
 - **`knowledge_digest_path` 注入**: ステップ 0.0 で保持した `<knowledge_digest_path>`（`.iterate-team/knowledge/lessons.md` 絶対パス）を、本コマンドが起動する注入対象 agent（`team-interviewer` / `team-planner`）の起動プロンプトに `knowledge_digest_path=<絶対パス>` として必ず含める（`plugin_root` 注入と同じ規約）。interviewer / planner の戻り値の `適用レッスン:` 行は Orchestrator が代理記録する（正本: harness-common）。詳細・正本は [`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`](<plugin_root>/operations/harness-common.md#knowledge-ダイジェスト注入全コマンド共通) を参照
+- **`adapter_dir` 注入**: ステップ 0.0 で保持した `<adapter_dir>`（`<project_dir>/.agent-os` 絶対パス）を、本コマンドが起動する注入対象 agent（`team-interviewer` / `team-planner`）の起動プロンプトに `adapter_dir=<絶対パス>` として必ず含める（`plugin_root` 注入と同じ規約）。interviewer / planner の戻り値の `適用ルール:` 行は Orchestrator が代理記録する（正本: harness-common）。詳細・正本は [`harness-common.md#adapter-注入全コマンド共通`](<plugin_root>/operations/harness-common.md#adapter-注入全コマンド共通) を参照
 - **メイン worktree の `task-x_y_z.md` 本文を Read しない**
 - 並列度上限 `team_max_parallel = 4`
 
 ## ステップ 0: 環境ガード（preflight）
 
-正規 session-id 発行前に preflight session-id `team_<YYYYMMDDHHmm>_preflight` を発行し runlog 宛先を確保する。bootstrap（作業ブランチ作成）は本コマンドが担当する。新規起動経路では `--from-branch <branch>`（既定 `main`）で派生元ブランチを選べる（`origin/<from_branch>` から placeholder ブランチを作成。`<from_branch>` はステップ 4 checkpoint に記録され `/iterate-build` の PR base に引き継がれる）。**host 環境で `main` 以外を指定した場合、`git fetch origin <branch>` が allowlist 未一致のため permission prompt が 1 回出る**（既定 `main` は無プロンプト。dev container は無プロンプト。理由は `permissions-aggregation.md` 参照）。詳細: [`iterate-team-runbook.md#ステップ-0-環境ガードpreflight`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-0-環境ガードpreflight)
+正規 session-id 発行前に preflight session-id `team_<YYYYMMDDHHmm>_preflight` を発行し runlog 宛先を確保する。bootstrap（作業ブランチ作成）は本コマンドが担当する。新規起動経路では `--from-branch <branch>`（既定 `main`）で派生元ブランチを選べる（`origin/<from_branch>` から placeholder ブランチを作成。`<from_branch>` はステップ 4 checkpoint に記録され `/iterate-build` の PR base に引き継がれる）。**host 環境で `main` 以外を指定した場合、`git fetch origin <branch>` が allowlist 未一致のため permission prompt が 1 回出る**（既定 `main` は無プロンプト。dev container は無プロンプト。理由は `permissions-aggregation.md` 参照）。
+
+branch bootstrap（0.1）・モデル判定（0.2）の後、**ステップ 0.3（adapter preflight）** で `.agent-os/` の staleness を確認する。既定は通知のみ（`/iterate-adapt` 実行を推奨）で書き込みを行わない。`--adapt` を指定した場合のみ、`.agent-os/` が `absent`/`stale` であれば `claude/*` ブランチ上でインライン観測（`/iterate-adapt` ステップ 3〜5 相当）を行う。詳細（0.3 節）: [`iterate-team-runbook.md#ステップ-0-環境ガードpreflight`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-0-環境ガードpreflight)
 
 ## ステップ 1: 引数処理
 

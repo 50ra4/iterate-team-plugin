@@ -1,0 +1,126 @@
+# Learned Rules: {{PROJECT_NAME}}
+
+<!--
+This file starts empty and grows only from real evidence: user feedback,
+failures, reviews, or evals. Never seed it with invented rules.
+
+Promotion criteria:
+- 1 occurrence  -> Status: candidate
+- 2+ occurrences (same lesson observed again, independently) -> Status: active
+- A rule that is outdated, superseded, or conflicts with a newer
+  observation -> Status: deprecated (keep it, do not delete, so the
+  history of why it changed is preserved)
+
+Every rule MUST be observable and unambiguous — an agent reading it must
+be able to check compliance without judgment calls. Do not write rules
+using vague words like "appropriately", "properly", "as needed", "when
+sensible", "cleanly". Instead state the concrete, checkable action
+("Do do X"), name a specific command/pattern/file, or give a checklist.
+
+Initially this file holds everything in one place. If it grows past
+roughly 10 active rules or 300 lines, run `scripts/split-learned-rules.sh
+--adapter <dir>` to move `Status: active` rule blocks into
+`.agent-os/rules/<scope>.md` (global/project/directory/file-pattern, by
+each rule's Scope field). This file then keeps an "## Active rules index"
+pointing at the moved rules; candidate and deprecated rules always stay
+here. After a split, `.agent-os/rules/*.md` is part of this file's active
+rules, not a separate concern: agents must read those files too — the
+index entries are pointers to binding rule bodies, equally binding as if
+they were still listed here.
+
+Rule format (do not deviate):
+
+## Rule: <short name>
+
+Status: candidate | active | deprecated
+Source: user-feedback | failure | review | eval
+Scope: global | project | directory | file-pattern
+Applies to:
+- <path or task type>
+
+Rule:
+- <observable instruction>
+
+Rationale:
+- <why this prevents failure>
+
+Examples:
+- Do: <example>
+- Do not: <example>
+
+Validation:
+- <command or checklist>
+-->
+
+## Active rules
+
+<!--
+Rules with Status: active. Only rules confirmed by 2+ independent
+occurrences (see learn-from-feedback / failure-log workflow) belong here.
+Agents MUST treat every rule in this section as binding.
+-->
+
+<!--
+Example (delete me):
+
+## Rule: Never mock the payments gateway in integration tests
+
+Status: active
+Source: failure
+Scope: directory
+Applies to:
+- tests/integration/payments/**
+
+Rule:
+- Integration tests under tests/integration/payments/ must run against
+  the sandbox payments API, never a mock or stub.
+
+Rationale:
+- A mocked gateway passed tests twice while the real sandbox contract had
+  changed, causing two production incidents (see failure-log.md,
+  2026-01-14 and 2026-02-03).
+
+Examples:
+- Do: call the sandbox client configured via PAYMENTS_SANDBOX_URL.
+- Do not: import unittest.mock.patch for the payments client in this
+  directory.
+
+Validation:
+- npm run test:integration -- payments (must hit the sandbox, verified by
+  checking the request log for a sandbox host).
+-->
+
+## Candidate rules
+
+<!--
+Rules with Status: candidate. These are single observations — real, but
+not yet confirmed to recur. Agents should be aware of them but are not
+required to treat them as settled; a second matching occurrence promotes
+the rule to Active (update Status: in place, do not duplicate the entry).
+-->
+
+<!--
+Example (delete me):
+
+## Rule: Prefer named exports over default exports in src/components
+
+Status: candidate
+Source: review
+Scope: directory
+Applies to:
+- src/components/**
+
+Rule:
+- New component files must use a named export matching the file name,
+  not a default export.
+
+Rationale:
+- Reviewer requested this once on 2026-03-02; not yet seen a second time.
+
+Examples:
+- Do: export function Button() { ... }
+- Do not: export default function Button() { ... }
+
+Validation:
+- Manual review of the diff for new files under src/components/.
+-->

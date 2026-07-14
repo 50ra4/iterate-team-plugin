@@ -68,6 +68,26 @@
       // 末尾ワイルドカードが許す余剰引数注入を防ぐ）
       "Bash(<PLUGIN_ROOT>/scripts/git-switch-branch.sh *)",
       "Bash(<PLUGIN_ROOT>/scripts/retrospect-delete-branch.sh *)",
+      // adapter（対象リポ直下 .agent-os/、operations/adapter-policy.md 参照）のインストーラ
+      // wrapper。vendor/agent-os/scripts/* は fable 由来の vendored read-only 検証スクリプト
+      // （validate-agent-os.sh: 必須ファイル + Status: enum 検証、detect-rule-conflicts.sh:
+      // 重複ルール名・scope 重複・矛盾候補の read-only 一次検出）で、いずれも .agent-os/ を書き換えない。
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-bootstrap.sh *)",
+      "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/validate-agent-os.sh *)",
+      "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/detect-rule-conflicts.sh *)",
+      // Phase 3（preflight staleness 検出）: /iterate-plan・/iterate-team のステップ 0.3 が
+      // .agent-os/ の fresh/absent/stale を判定するのに使う read-only 検出器（一切の書込みを
+      // 行わない。<adapter_dir> を Read するのみ）。
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-check-staleness.sh *)",
+      // Phase 2（フィードバック捕捉 + learned-rules ループ）: team-adapter が
+      // review-feedback-log.md へ flock 安全に逐語 1 件 append する経路
+      // （adapter-record-feedback.sh）と、.agent-os/ のコミット失敗時に fail-open 復旧する経路
+      // （adapter-recover.sh、knowledge-recover.sh 構造クローン）。split-learned-rules.sh は
+      // team-adapter の mode=adapt が --dry-run（提案のみ、本実行はしない）で呼ぶ fable 由来
+      // vendored スクリプト。
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-record-feedback.sh *)",
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-recover.sh *)",
+      "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/split-learned-rules.sh *)",
 
       // (3) git read-only / ブランチ操作系
       "Bash(git worktree list*)",
@@ -97,7 +117,16 @@
       // (5) knowledge（クロスセッション自己学習、git-tracked。knowledge-policy.md 参照）の書き込み
       // Edit は付与しない: knowledge-policy.md が lessons.jsonl / lessons.md の直接編集を禁止し、
       // team-retrospector の tools にも Edit は含まれない（proposals/INDEX.md への Write のみ使う）。
-      "Write(.iterate-team/knowledge/**)"
+      "Write(.iterate-team/knowledge/**)",
+
+      // (6) adapter（対象プロジェクトへの適応レイヤ、対象リポ直下 .agent-os/、git-tracked。
+      // operations/adapter-policy.md 参照）の書き込み。knowledge と異なり Edit も付与する:
+      // team-profiler（観測）は各ファイルを新規生成・上書きするのみだが、Phase 2 の team-adapter
+      // （学習）は learned-rules.md 内の既存ルールブロックの Status: を candidate→active へ
+      // その場で書き換える（同一ブロックを複製せず上書きする、adapter-policy.md §4）ため、
+      // in-place 編集が構造的に必須という意図的な差異。
+      "Write(.agent-os/**)",
+      "Edit(.agent-os/**)"
     ],
     "deny": [
       // push 経路の防御: 直接 git push の主要な破壊的形態を deny する。

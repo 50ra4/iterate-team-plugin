@@ -17,6 +17,7 @@ team 固有不変条件（`team_max_parallel=4` / Draft PR 1 回 / worktree 内 
 
 - **`<plugin_root>` 解決**: SessionStart hook が注入する `<session-init>` の `plugin_root`（= init.json の plugin_root）を `<plugin_root>` として保持し、本文・operations・scripts 参照（`<plugin_root>/...`）の解決と、全 subagent 起動プロンプトへの `plugin_root=<絶対パス>` 注入に使う。ランタイム状態は対象リポジトリ直下 `.iterate-team/{state,tasks,changes}/`
 - **`knowledge_digest_path` 注入**: `<knowledge_digest_path>`（`.iterate-team/knowledge/lessons.md` 絶対パス）を、本コマンドが起動する注入対象 agent（`team-generator` / `team-evaluator` / `team-test-coder`）の起動プロンプトに `knowledge_digest_path=<絶対パス>` として必ず含める（初回起動・フェーズ B 再起動・差し戻し再起動のいずれも対象）。詳細・正本は [`harness-common.md#knowledge-ダイジェスト注入全コマンド共通`](<plugin_root>/operations/harness-common.md#knowledge-ダイジェスト注入全コマンド共通) を参照
+- **`adapter_dir` 注入**: `<adapter_dir>`（`<project_dir>/.agent-os` 絶対パス）を、本コマンドが起動する注入対象 agent（`team-generator` / `team-evaluator` / `team-test-coder`）の起動プロンプトに `adapter_dir=<絶対パス>` として必ず含める（初回起動・フェーズ B 再起動・差し戻し再起動のいずれも対象）。詳細・正本は [`harness-common.md#adapter-注入全コマンド共通`](<plugin_root>/operations/harness-common.md#adapter-注入全コマンド共通) を参照
 
 ## 引数バリデーション
 

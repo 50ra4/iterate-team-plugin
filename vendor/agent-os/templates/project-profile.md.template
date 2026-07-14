@@ -1,0 +1,105 @@
+# Project Profile: {{PROJECT_NAME}}
+
+<!--
+This file records OBSERVED FACTS about this specific project. It is built
+incrementally as the agent explores the codebase — it does not start
+pre-filled with assumptions.
+
+Golden rule: record only observed facts here. If you are not sure, it is
+a guess, not a fact — put it in "Hypotheses (unverified)" at the bottom
+instead. A hypothesis never gets treated as a fact until it has been
+checked against the actual code/config/output and moved up into the
+relevant section above.
+
+Last updated: {{DATE}}
+-->
+
+## Project overview
+
+<!--
+Record: project name, one or two sentences on its purpose/domain, and who
+it serves (internal tool, public product, library, etc). Only state what
+is confirmed by README, package metadata, or direct inspection.
+-->
+
+## Tech stack
+
+<!--
+Record: languages, frameworks, package manager, runtime versions, key
+libraries — each one observed directly (e.g. read from package.json,
+pyproject.toml, go.mod, a lockfile, or an import statement), not assumed
+from the project's name or folder layout.
+-->
+
+## Directory structure
+
+<!--
+Record: the top-level layout and what each major directory is for, based
+on actually listing and skimming it. Note where source, tests, config,
+and generated/build artifacts live.
+-->
+
+## Verified commands
+
+<!--
+Do not duplicate the command list here. Record only a pointer plus any
+project-specific caveats (e.g. "tests require a running local DB").
+The authoritative, runnable list of build/test/lint/typecheck commands
+lives in `.agent-os/command-map.md` — a command only belongs there once
+it has actually been run and its behavior observed.
+-->
+
+See `.agent-os/command-map.md` for verified commands.
+
+## Architecture boundaries
+
+<!--
+Record: layers or modules that must not depend on each other, ownership
+boundaries, public vs internal APIs — as observed from the code (imports,
+module structure, existing lint/architecture rules), not as a guess at
+"good practice."
+-->
+
+## Naming conventions
+
+<!--
+Record: casing, file naming, prefix/suffix patterns for tests, components,
+migrations, etc — only patterns actually observed repeated across the
+codebase, not conventions you would personally choose.
+-->
+
+## Forbidden changes
+
+<!--
+Record: files, directories, or operations that must never be changed
+without explicit approval (e.g. generated files, vendored code, database
+migrations already applied, production config). Base this on explicit
+user statements or clear codebase signals (a "DO NOT EDIT" header, a
+.gitattributes generated-file marker), not assumption.
+-->
+
+## Areas where AI tends to err
+
+<!--
+Record: specific parts of this codebase where agents have previously made
+mistakes (from failure-log.md or review-feedback-log.md entries), so
+future sessions are warned before touching them. Link back to the
+failure-log or review-feedback-log entry that established this.
+-->
+
+## Hypotheses (unverified)
+
+<!--
+Anything you suspect but have not confirmed goes here, clearly labeled as
+unverified. A hypothesis NEVER becomes a rule and is NEVER copied into a
+section above until it has been checked against real evidence (running a
+command, reading the actual file, asking the user) and confirmed. When
+verified, move it to the correct section above and delete it from here.
+When disproven, delete it.
+-->
+
+<!--
+Example (delete me):
+- Hypothesis: the project may use feature flags for gradual rollout,
+  based on a `flags/` folder name — not yet confirmed by reading code.
+-->

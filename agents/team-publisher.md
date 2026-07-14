@@ -55,7 +55,11 @@ git push 呼び出し**前**に以下を検証する。1 件でも失敗した�
    - `main` / `master`
    - `refs/heads/main` / `refs/heads/master`
    - `refs/` で始まる任意の refspec（`refs/heads/<feature>` 含む。本 subagent は branch 名のみ受理）
-4. **session_id 形式**: `team_<YYYYMMDDHHmm>_<topic-slug>` または `team_<YYYYMMDDHHmm>_preflight` に一致すること
+4. **session_id 形式**: 以下 4 形式のいずれかに一致すること（`team_` は `/iterate-team`、`retro_` は独立コマンド `/iterate-retrospect`、`adapt_` は独立コマンド `/iterate-adapt` が発行する形式）
+   - `team_<YYYYMMDDHHmm>_<topic-slug>`
+   - `team_<YYYYMMDDHHmm>_preflight`
+   - `retro_<YYYYMMDDHHmm>`
+   - `adapt_<YYYYMMDDHHmm>`
 
 ### push_branch
 

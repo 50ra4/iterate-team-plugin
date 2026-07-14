@@ -1,0 +1,69 @@
+# Failure Log: {{PROJECT_NAME}}
+
+<!--
+This file starts empty. Append an entry every time a command fails, a
+verification step fails, or the agent's approach turns out to be wrong,
+so the mistake is not silently repeated.
+
+A failure repeated 2+ times (same root cause, same or similar task) MUST
+be promoted into a rule in `.agent-os/learned-rules.md` (Status: active,
+Source: failure) — do not just keep logging it here indefinitely.
+
+Entry format (do not deviate):
+
+## {{DATE}} — <short task description>
+
+Task:
+- <what the agent was trying to do>
+
+What failed:
+- Command: <exact command run>
+- Error: <verbatim error output, not paraphrased>
+
+Root cause:
+- <the actual underlying reason, not just the symptom>
+
+Impact:
+- <what broke, what was at risk, blast radius>
+
+Prevention:
+- <concrete, checkable action to avoid recurrence>
+
+Recurrence count: 1
+
+Promoted rule: <link/name of rule in learned-rules.md, or "not yet promoted">
+-->
+
+<!--
+Example (delete me):
+
+## 2026-01-14 — Payments integration test passed against a stale mock
+
+Task:
+- Add a new refund flow and verify it with the existing integration
+  tests.
+
+What failed:
+- Command: npm run test:integration -- payments
+- Error: (tests passed, but the deployed sandbox contract had changed a
+  field name; failure surfaced later in staging as
+  `TypeError: Cannot read properties of undefined (reading 'amountCents')`)
+
+Root cause:
+- The integration test suite was using a hand-written mock of the
+  payments gateway instead of the real sandbox, so a real API change was
+  never exercised.
+
+Impact:
+- Refund flow was broken in staging; caught before production release by
+  manual QA.
+
+Prevention:
+- Integration tests in tests/integration/payments/ must call the sandbox
+  API, never a mock, for anything touching the payments contract.
+
+Recurrence count: 2
+
+Promoted rule: "Never mock the payments gateway in integration tests"
+(learned-rules.md, Status: active)
+-->

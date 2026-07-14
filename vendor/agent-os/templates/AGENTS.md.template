@@ -1,0 +1,47 @@
+<!--
+Role: canonical shape for the project AGENTS.md entrypoint, kept here in
+the Agent OS source repo for reference. What bootstrap-project.sh
+actually installs into a target project is a copy of
+project-adapter/AGENTS.md ({{PROJECT_NAME}} filled in by adapt-to-project)
+-- keep the two structurally in sync; adapt-to-project reconciles a
+project's installed AGENTS.md against this shape.
+-->
+
+# {{PROJECT_NAME}} — Agent Instructions
+
+Global, project-agnostic principles live in `.agent-os/GLOBAL_AGENTS.md`,
+installed alongside this project. Read it first; not repeated here.
+
+## At the start of every task, read
+
+1. `.agent-os/project-profile.md` — observed facts about this project.
+2. `.agent-os/command-map.md` — the only commands you may run to verify work.
+3. `.agent-os/risk-map.md` — areas needing explicit approval before touching.
+4. `.agent-os/learned-rules.md` — honor every `Status: active` rule.
+   `Status: candidate` rules are observations only, not yet binding. If
+   `.agent-os/rules/` exists, active rule bodies live in
+   `.agent-os/rules/*.md` — follow the `Active rules index` in
+   `learned-rules.md` and read those files too; they are just as binding.
+
+## Safety (non-negotiable)
+
+- No destructive operations (`rm -rf`, force-push, dropping data, migrations)
+  without explicit user approval.
+- Never read, print, or commit secrets (`.env`, keys, tokens, credentials).
+- Build, test, and any state-changing commands: run only what is listed
+  in `.agent-os/command-map.md` — never invent one. Read-only inspection
+  (`ls`, `cat`, `grep`, `find`, `git status`/`log`/`diff`) is always
+  permitted, including while the map is still an empty scaffold.
+
+## After you work / learning loop
+
+- If something fails, record the command, the cause, and the prevention
+  in `.agent-os/failure-log.md` — never hide a failure.
+- If the user corrects you, record it verbatim in
+  `.agent-os/review-feedback-log.md`.
+- Never mark work done while tests, types, or lint are failing or skipped.
+
+## This file stays short
+
+Procedures live in skills. Project facts and learning history live in
+`.agent-os/`. Do not let this file grow into a manual.

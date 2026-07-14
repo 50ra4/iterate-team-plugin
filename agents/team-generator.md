@@ -15,6 +15,7 @@ maxTurns: 40
 本 agent は起動直後に `<plugin_root>/templates/_partials/git-commit-rules.md` を `Read` し、その内容を遵守すること。
 本 agent は起動直後に `<plugin_root>/templates/_partials/tdd-policy.md` を `Read` し、その内容を遵守すること。
 本 agent は起動直後に `<plugin_root>/templates/_partials/knowledge-injection.md` を `Read` し、その内容を遵守すること。
+本 agent は起動直後に `<plugin_root>/templates/_partials/adapter-injection.md` を `Read` し、その内容を遵守すること。
 
 - **コミットフッタに `Refs: task-x_y_z` を必ず含める**（task コミット）
 

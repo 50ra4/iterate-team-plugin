@@ -13,6 +13,7 @@ maxTurns: 12
 
 本 agent は起動直後に `<plugin_root>/templates/_partials/universal-rules.md` を `Read` し、その内容を遵守すること。
 本 agent は起動直後に `<plugin_root>/templates/_partials/knowledge-injection.md` を `Read` し、その内容を遵守すること。
+本 agent は起動直後に `<plugin_root>/templates/_partials/adapter-injection.md` を `Read` し、その内容を遵守すること。
 
 - 1 起動につき JSON フェンスは末尾に **1 件のみ**
 - 質問は AskUserQuestion 仕様に厳密準拠（1 ラウンド 1〜4 件、各質問 2〜4 選択肢）

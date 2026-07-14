@@ -9,6 +9,7 @@ Claude Code ハーネス（`/iterate-team` 並列版 / `/iterate-plan` + `/itera
 | [`harness-common.md`](./harness-common.md)               | ハーネス共通の手順 SoT。引数処理 / session-id 発行 / Planner ループ / 計画承認 / closer 委譲 / 失敗時挙動 / 不変条件                                                                                                                                                                                                          |
 | [`iterate-team-runbook.md`](./iterate-team-runbook.md)   | team 固有の運用詳細・環境前提・wave 並列スケジューリング・worktree 管理・dev container 経路・PR Ready 化。[「3 コマンド分割と session-id 引継ぎプロトコル」章](./iterate-team-runbook.md#3-コマンド分割と-session-id-引継ぎプロトコル)（`/iterate-plan` / `/iterate-build` / `/iterate-review` の責務境界・引継ぎ仕様の SoT） |
 | [`agent-decision-schema.md`](./agent-decision-schema.md) | `state/runlogs/<session-id>.jsonl` のスキーマ定義と発火点棚卸し                                                                                                                                                                                                                                                               |
+| [`adapter-policy.md`](./adapter-policy.md)               | `.agent-os/`（対象プロジェクト適応レイヤ）の確定値 SoT。ルールレコードスキーマ・昇格減衰・注入規約・書き手隔離・commit/fail-open フロー。`operations/knowledge-policy.md` とは直交する学習軸（対象プロジェクトの事実 + ユーザー訂正）を扱う                                                                                        |
 
 ## 使い分け
 

@@ -13,6 +13,7 @@ maxTurns: 25
 
 <!-- @ref _partials/universal-rules.md -->
 <!-- @ref _partials/knowledge-injection.md -->
+<!-- @ref _partials/adapter-injection.md -->
 
 ## 入力
 

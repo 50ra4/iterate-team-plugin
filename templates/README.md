@@ -57,6 +57,7 @@ team 専用テンプレ（`_base/team-publisher.md` / `_base/team-reviewer-code.
 | `_partials/generator-prohibitions.md`        | Generator の禁止事項一覧                                | `generator.md` / `team-generator.md`                                                         |
 | `_partials/advisor-common.md`                | Advisor 共通の回答フォーマット・品質基準                | `advisor-architect.md` / `advisor-security.md` / `advisor-tech-lead.md` / `advisor-ui-ux.md` |
 | `_partials/knowledge-injection.md`           | knowledge digest の読込・適用対象・`lesson_applied` 記録規則 | `planner.md` / `team-generator.md` / `evaluator.md` / `interviewer.md` / `test-coder.md`      |
+| `_partials/adapter-injection.md`             | `.agent-os/` adapter の読込・適用対象・`adapter_applied` 記録規則 | `planner.md` / `team-generator.md` / `evaluator.md` / `interviewer.md` / `test-coder.md`      |
 
 ## テンプレ文法
 

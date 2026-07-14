@@ -1,0 +1,58 @@
+# Review Feedback Log: {{PROJECT_NAME}}
+
+<!--
+This file starts empty. Append an entry every time the user corrects the
+agent, pushes back on an approach, or gives feedback during or after a
+review — capturing their own words, not a paraphrase, so intent is not
+lost in translation.
+
+Categories (pick exactly one): convention, architecture, testing,
+security, workflow, communication, forbidden-action.
+
+A correction seen for the first time is recorded as a candidate rule in
+learned-rules.md. The same lesson observed a second time (independently,
+not the same conversation repeated) is promoted to an active rule — see
+`.agent-os/learned-rules.md` for the promotion mechanics.
+
+Entry format (do not deviate):
+
+## {{DATE}} — <short label>
+
+Feedback (verbatim):
+- "<the user's own words, unedited>"
+
+Category: convention | architecture | testing | security | workflow | communication | forbidden-action
+
+Interpretation:
+- <what the agent understood the feedback to mean, in concrete terms>
+
+Existing-rule check:
+- <does this overlap or conflict with an existing rule in
+  learned-rules.md? name it, or state "no existing rule found">
+
+Action taken:
+- recorded as candidate | promoted to active | no action (+ reason)
+-->
+
+<!--
+Example (delete me):
+
+## 2026-03-02 — Named exports in components
+
+Feedback (verbatim):
+- "please use named exports here, not default exports, that's what the
+  rest of the folder does"
+
+Category: convention
+
+Interpretation:
+- New files under src/components/ should use a named export matching the
+  file name, matching the existing convention in that directory.
+
+Existing-rule check:
+- No existing rule found in learned-rules.md for export style.
+
+Action taken:
+- recorded as candidate ("Prefer named exports over default exports in
+  src/components", learned-rules.md)
+-->

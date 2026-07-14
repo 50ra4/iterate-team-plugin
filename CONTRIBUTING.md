@@ -33,6 +33,19 @@ scripts/run-tests.sh              # シェルユニットテストを全件個�
 - テンプレ文法（プレースホルダ `{{NAME}}` / `{{HARNESS}}`、条件ブロック `@if`、共通断片 `@ref`）と新規 agent の追加手順は [`templates/README.md`](./templates/README.md) を参照。
 - ハーネスの処理仕様・運用 runbook・スキーマ定義は [`operations/`](./operations/)（[`operations/README.md`](./operations/README.md) が索引）を参照。
 
+### 新規 adapter 系 agent の追加
+
+`team-profiler`（対象プロジェクト観測）や Phase 2 の `team-adapter`（learned-rules 学習）のような adapter（`.agent-os/`）系 agent も、他の `team-*` agent と**全く同じテンプレ → `build-agents.sh` → `validate-agents.sh` サイクル**に従う。`templates/_base/profiler.md` のようなテンプレートを編集し、`scripts/build-agents.sh` で `agents/team-profiler.md` を再生成し、`scripts/build-agents.sh --check` / `scripts/validate-agents.sh` でドリフトが無いことを確認する。特別扱いの build 経路は存在しない。値・スキーマの正本は [`operations/adapter-policy.md`](./operations/adapter-policy.md) を参照。
+
+## Vendored Agent OS（`vendor/agent-os/`）
+
+`vendor/agent-os/` は [fable-like-coding-agent-instruction-system](https://github.com/50ra4/fable-like-coding-agent-instruction-system) の `agent-os/` ツリーを **verbatim** に複製した vendoring 資産であり、対象リポへ `.agent-os/`（プロジェクト適応レイヤ）を設置する canonical エンジンを提供する。出典 repo・commit SHA・複製日は [`vendor/agent-os/UPSTREAM.md`](./vendor/agent-os/UPSTREAM.md) に記録している。
+
+- **`vendor/agent-os/` を手編集してはならない。** フォークせず upstream の verbatim コピーとして維持することが vendoring の前提であり、直接編集すると次回の再 vendoring で差分が失われる。
+- upstream 側に変更が必要な場合（バグ修正・機能追加）は本リポではなく upstream の fable-like-coding-agent-instruction-system に対して行う。
+- upstream を追従する場合は、対象コミットから `agent-os/` ツリーを丸ごと再 vendoring し、`vendor/agent-os/UPSTREAM.md` の commit SHA・複製日を更新する。
+- `scripts/run-tests.sh` は `vendor/agent-os/scripts/validate-agent-os.sh` を実行し、vendoring ツリーの構造破損（必須ファイル欠落等）を検出する。再 vendoring 後は必ずこのチェックが green であることを確認すること。
+
 ## 変更の出し方
 
 1. 作業ブランチを切る（`main` へ直接コミットしない）。
