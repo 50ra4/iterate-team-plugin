@@ -75,6 +75,10 @@
       "Bash(<PLUGIN_ROOT>/scripts/adapter-bootstrap.sh *)",
       "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/validate-agent-os.sh *)",
       "Bash(<PLUGIN_ROOT>/vendor/agent-os/scripts/detect-rule-conflicts.sh *)",
+      // Phase 3（preflight staleness 検出）: /iterate-plan・/iterate-team のステップ 0.3 が
+      // .agent-os/ の fresh/absent/stale を判定するのに使う read-only 検出器（一切の書込みを
+      // 行わない。<adapter_dir> を Read するのみ）。
+      "Bash(<PLUGIN_ROOT>/scripts/adapter-check-staleness.sh *)",
       // Phase 2（フィードバック捕捉 + learned-rules ループ）: team-adapter が
       // review-feedback-log.md へ flock 安全に逐語 1 件 append する経路
       // （adapter-record-feedback.sh）と、.agent-os/ のコミット失敗時に fail-open 復旧する経路

@@ -89,6 +89,8 @@ npx iterate-team-plugin path    # プラグインルートの絶対パスを表�
 
 確定値・スキーマ・注入規約の正本は [`operations/adapter-policy.md`](./operations/adapter-policy.md) を参照。
 
+`/iterate-plan`（および `/iterate-team`）は preflight ステップ 0.3 で `.agent-os/` の staleness を都度確認する。既定では `.agent-os/` が不在/陳腐化していても書き込みは行わず、`/iterate-adapt` の実行を推奨する 1 行通知のみを出す。`--adapt` を付けて起動した場合に限り、不在/陳腐化を検知すると `claude/*` ブランチ上で `.agent-os/` のインライン設置・観測（`/iterate-adapt` 相当）を自動実行してから計画を進める。
+
 ## 仕組み（パス規約）
 
 - **プラグイン資産**（commands / agents / templates / operations / scripts / assets）はプラグインルート配下に置かれ、本文中では `<plugin_root>/...` で参照する。

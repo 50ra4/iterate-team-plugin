@@ -37,7 +37,7 @@ PR 作成 / 本文更新 / Ready 化は Orchestrator が実行環境で利用可
 
 ## 主要 runlog イベント（早見）
 
-`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `retrospective_started` / `retrospective_completed` / `retrospective_failed`（ステップ 6.7 fail-open） / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` / `feedback_staged`（capture マーカー、ステップ 2.5 / 4 / review） / `adapter_updated`（ステップ 6.8 学習コミット成功時） / `escalated`
+`runtime_detected`（`{is_dev_container}`） / `fetch_failed` / `origin_main_missing` / `head_is_protected` / `head_not_claude_prefix` / `head_branch_mismatch_on_resume` / `dirty_worktree` / `branch_name_conflict` / `branch_create_failed` / `integration_branch_created` / `integration_branch_renamed` / `branch_rename_conflict` / `head_branch_mismatch_before_rename` / `branch_rename_failed` / `model_check_passed` / `model_confirmed` / `model_aborted_by_user` / `wave_started` / `wave_chunk_started` / `worktree_created` / `worktree_removed` / `wave_merge_started` / `task_merged` / `merge_conflict` / `merge_dirty_worktree` / `branch_pushed`（phase: `pre_implementation` | `post_implementation`） / `pr_created` / `pr_approved` / `plan_presented`（host, step4 提示のみ） / `plan_already_approved`（dev container, step4.5 で承認済み確認） / `pr_body_updated` / `pr_marked_ready` / `pr_flow_skipped`（dev container, phase: `pre_implementation` | `post_implementation`） / `post_push_skipped`（dev container） / `ready_skipped`（dev container） / `dev_container_complete`（dev container 終了時） / `advisor_batch_completed` / `parallel_review_started` / `codex_review_serial_fallback` / `self_improve_simplify_completed` / `self_improve_simplify_failed` / `self_improve_simplify_dirty` / `self_improve_simplify_orchestrator_committed` / `self_review_started` / `self_improve_security_blockers_found` / `self_improve_security_clean` / `self_improve_completed` / `self_improve_escalated`（`reason: simplify_no_progress | max_rounds_exceeded`） / `phase_b_advisor_request_issued` / **`agent_decision`**（Agent 呼出・スキップ・採否記録） / `retrospective_started` / `retrospective_completed` / `retrospective_failed`（ステップ 6.7 fail-open） / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` / `feedback_staged`（capture マーカー、ステップ 2.5 / 4 / review） / `adapter_preflight`（軽量マーカー、ステップ 0.3、payload: `{status: "absent"|"stale"}`） / `adapter_updated`（ステップ 6.8 学習コミット成功時、または `--adapt` 指定時のステップ 0.3 インライン観測コミット成功時） / `escalated`
 
 各イベントの payload 仕様は `<plugin_root>/commands/iterate-team.md` の各ステップ記述、または `<plugin_root>/scripts/runlog-append.sh` の呼び出し箇所を参照。`agent_decision` イベントの抽出:
 
@@ -51,6 +51,8 @@ team の全発火点に加えて、以下を定める:
 
 | 発火点                                      | agent                   | decision   | 典型 reason                                              |
 | ------------------------------------------- | ----------------------- | ---------- | -------------------------------------------------------- |
+| ステップ 0.3 `--adapt` 指定 + `.agent-os/` absent/stale 検出時 | `team-profiler` | `invoked` | 「adapter preflight 観測（--adapt 指定）」 |
+| ステップ 0.3 fail-open（観測・コミット失敗時） | `team-profiler`       | `rejected` | 「adapter preflight 観測失敗（fail-open）」              |
 | ステップ 3.2 type=research 起動時           | `researcher`            | `invoked`  | 「Planner 要求: &lt;topic&gt;」                          |
 | ステップ 3.2 type=debug 起動時              | `debugger`              | `invoked`  | 「Planner 要求: &lt;symptoms&gt;」                       |
 | ステップ 3.2 type=trace 起動時              | `tracer`                | `invoked`  | 「Planner 要求: &lt;topic&gt;」                          |
@@ -72,7 +74,7 @@ team の全発火点に加えて、以下を定める:
 
 スキーマ詳細（キー定義 / decision 値域）は `agent-decision-schema.md` を参照。`retrospective_started` / `retrospective_completed` / `retrospective_failed` / `lesson_recorded` / `lesson_applied` / `plugin_proposal_recorded` は `agent_decision` とは別の event 種別であり、詳細は `knowledge-policy.md` §10 を参照。
 
-`.agent-os/`（プロジェクト適応レイヤ）の観測主体である `team-profiler` は、上表の発火点のいずれにも現れない。`team-profiler` は `/iterate-team` のステップからは一切起動されず、standalone コマンド `/iterate-adapt` からのみ起動される（`adapter-policy.md` §6）。一方 **学習主体の `team-adapter`（Phase 2）はステップ 6.8（上表参照）から `mode=feedback` で起動される**。新規 runlog イベント（`adapter_observed` / `adapter_updated` / `adapter_applied` / `feedback_recorded` / `rule_candidate_recorded` / `rule_promoted` / `rule_deprecated` / `adapter_conflict` / `feedback_staged`（capture マーカー、Phase 2 新規） 等）の詳細は `agent-decision-schema.md` および `adapter-policy.md` §8 を参照。
+`.agent-os/`（プロジェクト適応レイヤ）の観測主体である `team-profiler` は、standalone コマンド `/iterate-adapt` に加え、**Phase 3 導入以降はステップ 0.3（`--adapt` 指定時、かつ `.agent-os/` が `absent`/`stale` の場合のみ）からもインラインで起動される**（上表参照）。それ以外の `/iterate-team` ステップからは起動されない。書き手限定（`.agent-os/` への書き込み主体は `team-profiler`（観測）/ `team-adapter`（学習）の 2 agent のみ）は不変（`adapter-policy.md` §6）。一方 **学習主体の `team-adapter`（Phase 2）はステップ 6.8（上表参照）から `mode=feedback` で起動される**。新規 runlog イベント（`adapter_observed` / `adapter_updated` / `adapter_applied` / `feedback_recorded` / `rule_candidate_recorded` / `rule_promoted` / `rule_deprecated` / `adapter_conflict` / `feedback_staged`（capture マーカー、Phase 2 新規） / `adapter_preflight`（軽量マーカー、ステップ 0.3、Phase 3 新規） 等）の詳細は `agent-decision-schema.md` および `adapter-policy.md` §8 を参照。
 
 ## `--model <model-id>` 引数の影響範囲
 
@@ -441,6 +443,46 @@ runlog 追記: `runtime_detected` / `{is_dev_container, mcp_profile}`（`--model
     - `中止` — 処理中止。runlog `model_aborted_by_user` / `{model}` 追記後、Usage メッセージ（`/model sonnet` 切替か `--model <id>` 明示指定の案内）を返して終了
 
 > **設計意図**: 旧設計では Opus 系を検出すると即 abort していたが、(a) `model="unknown"` の CLI ではガードが効かず、(b) Opus / Haiku でも実行を試したいケースがあるため、ガードを「即 abort」から「ユーザ確認」へ緩和。`--model` 指定の明示経路はそのまま skip（ユーザが明示的に承知している前提）。
+
+#### 0.3 adapter preflight
+
+ステップ 0.1（作業ブランチ bootstrap）・ステップ 0.2（モデル判定）の**後**に実行する（`.agent-os/` への書き込みが発生し得るため、必ず `claude/*` ブランチ上に載せる。0.1 より前に置くと bootstrap 前の起動ブランチ上に誤ってコミットする経路が生まれる）。`.agent-os/`（`adapter-policy.md` が定める対象プロジェクト適応レイヤ）が不在・陳腐化している場合にユーザーへ通知し、`--adapt` 指定時のみインライン観測を行う。`.agent-os/` は任意の適応レイヤであり、未構築でも 5 injected agent（`team-planner` 等）は `adapter_dir` の `Read` 失敗時に黙って skip する規約（`harness-common.md#adapter-注入全コマンド共通`）のため、本ステップは計画フェーズの完了を阻害しない。
+
+**0.3.0 staleness 判定**: `Bash <plugin_root>/scripts/adapter-check-staleness.sh --adapter "<project_dir>/.agent-os"` を実行する（read-only 検出器。標準出力 1 行目が `fresh` / `absent` / `stale` のいずれかで始まる。`fresh` は exit 0、`absent` は exit 2、`stale` は exit 3。`absent`/`stale` の場合は同じ行に `: <reason>` が続く。判定規則の正本は `adapter-policy.md` §2 および `<plugin_root>/scripts/adapter-check-staleness.sh` 冒頭コメント）。
+
+- **`fresh`**: 何もせずステップ 1 へ進む（通知なし・runlog 追記なし）
+- **`absent` / `stale`**: `$ARGUMENTS` に `--adapt` が含まれるかで 0.3.1（既定）/ 0.3.2（`--adapt`）に分岐する
+
+##### 0.3.1 既定（通知のみ・書き込みなし）
+
+`--adapt` が指定されていない場合:
+
+1. 1 行の通知をユーザーへ提示する（処理は中断しない）:
+
+   ```
+   [iterate-plan] .agent-os/ が<不在 / 陳腐化>です。`/iterate-adapt` の実行を推奨します
+   （対象プロジェクトの事実を team-planner 等 5 agent へ注入できるようになります）。
+   ```
+
+2. 軽量マーカーを runlog 追記する（逐語 reason は含めない）:
+
+   ```bash
+   <plugin_root>/scripts/runlog-append.sh "<preflight-session-id>" adapter_preflight '{"status":"<absent|stale>"}'
+   ```
+
+3. `.agent-os/` へは一切 `Write`/`Edit` せず、ステップ 1 へ進む
+
+##### 0.3.2 `--adapt` 指定時（インライン観測）
+
+`--adapt` が指定され、かつ 0.3.0 が `absent` / `stale` を検出した場合、`/iterate-adapt`（[`iterate-adapt.md`](<plugin_root>/commands/iterate-adapt.md)）のステップ 3〜5 と同一の手順をインラインで実行する。**承認ゲート（`/iterate-adapt` ステップ 2 相当の `AskUserQuestion`）は host / dev container いずれでも設けない**（`--adapt` フラグの指定自体がユーザーの明示的な opt-in であるため。standalone `/iterate-adapt` が求める確認と異なり、本経路はユーザーが `/iterate-plan --adapt` 起動時点で既に承知している前提）。
+
+1. `Bash <plugin_root>/scripts/adapter-bootstrap.sh --target "<project_dir>"` を実行する（`/iterate-adapt` ステップ 3 と同一。8 ファイル + `GLOBAL_AGENTS.md` の scaffold インストール、既存ファイルは上書きしない）。失敗時は 0.3.2 fail-open へ
+2. `Agent subagent_type: team-profiler` を起動する。プロンプトキーは `/iterate-adapt` ステップ 4 と同一: `plugin_root` / `session_id`（`<preflight-session-id>` を渡す） / `project_dir` / `adapter_dir`（`<project_dir>/.agent-os` 絶対パス） / `topic_slug`（`<project_dir>` のディレクトリ名を kebab-case 化した slug。`/iterate-adapt` ステップ 4 と同じ規則。まだ Planner が命名した本セッションの topic-slug は確定していないため流用しない）。team-profiler は完了時に自ら `adapter_observed` を runlog へ自己記録する（`adapter-policy.md` §8）。異常終了時は 0.3.2 fail-open へ
+3. `Bash <plugin_root>/vendor/agent-os/scripts/validate-agent-os.sh --adapter "<project_dir>"` を実行する（`/iterate-adapt` ステップ 5.1 と同一。exit code 非 0 でも処理は中止せず後段のコミットへ進む）
+4. `Bash git status --porcelain -- .agent-os/` で差分を確認する。**差分がある場合**: 変更ファイルを 1 件ずつ個別 `git add`（`git add -A` / `git add .` 禁止）→ 1 コミット。subject `docs: .agent-os アダプタを初期化/更新（preflight）`、フッタ `Refs: adapter-<ts>`（`<ts>` はステップ 0 冒頭で発行した `<preflight-session-id>` と同一の `YYYYMMDDHHmm`）。コミット成功後 `<plugin_root>/scripts/runlog-append.sh "<preflight-session-id>" adapter_updated '{"files":[<changed files>],"reason":"--adapt 指定によるステップ 0.3 インライン観測"}'` を追記する（`team-profiler` の自己記録する `adapter_observed` とは別イベント。Orchestrator がコミット成功時に記録する既存規約と同一、`adapter-policy.md` §8）。**差分がない場合**: コミットも `adapter_updated` 追記も行わない。コミット失敗時は 0.3.2 fail-open へ
+5. ステップ 1 へ進む（push は行わない。ステップ 0.1 で作成済みの `claude/*` ブランチにコミットが積まれた状態のまま計画フェーズを継続し、以後の push はステップ 3 以降の既存フロー（Planner 出力コミット・`team-publisher` 経由の push）に自然に乗る）
+
+**0.3.2 fail-open**: 上記いずれかのステップが失敗した場合、`Bash <plugin_root>/scripts/adapter-recover.sh "<preflight-session-id>"` で復旧する（`.agent-os/` の staged/tracked 差分を HEAD へ復元し、残る untracked 生成物を `.iterate-team/state/<preflight-session-id>/failed-adapter/` へ退避、`adapter-policy.md` §7）。続けて `<plugin_root>/scripts/runlog-agent-decision.sh "<preflight-session-id>" team-profiler rejected "adapter preflight 観測失敗（fail-open）"` を追記した上で、**エスカレーション（ステップ 9）へは遷移せずステップ 1 へ続行する**（6.7 / 6.8 と同様、adapter 関連の失敗はハーネス本体の完了を阻害しない設計方針を preflight にも適用する。以後の計画は adapter 無しで進む）。
 
 ### ステップ 2.5: 要件壁打ち（team-interviewer ループ）
 

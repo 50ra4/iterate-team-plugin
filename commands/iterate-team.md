@@ -1,6 +1,6 @@
 ---
 description: agent team 並列マルチエージェント・ハーネス。要望文から計画を作成し、独立タスクを git worktree で分離して並列実装、検収は Evaluator 先行→APPROVED 後に Code Review の逐次ゲート、PR を自動作成して承認後に実装着手する（承認は環境分岐で通算 1 回）。
-argument-hint: [--from-branch <branch>] <要望文>
+argument-hint: [--from-branch <branch>] [--adapt] <要望文>
 ---
 
 # /iterate-team
@@ -47,6 +47,7 @@ iterate-team は **agent team（並列実行）ハーネス**であり、4 軸�
 - **0.2 モデル判定（確認プロンプト方式）**: `--model <id>` の厳密パターン検出時は本判定を skip。それ以外の場合:
   - `<session-init>` の `model` が `*sonnet*` または `unknown` の場合は何もせず通過（unknown はモデル情報が伝播しない CLI バージョンで誤検知を避けるため通過とする）
   - それ以外（`*opus*` / `*haiku*` / その他）の場合は `AskUserQuestion` で「現在のモデル `<model>` のままで `/iterate-team` を実行しますか？（ハーネスは Sonnet 系で検証されています）」を表示。選択肢: `続行` / `中止`。`中止` 選択時は `model_aborted_by_user` 追記後処理中止、`続行` 選択時は `model_confirmed` / `{model}` を追記して通過
+- **0.3 adapter preflight**: `Bash <plugin_root>/scripts/adapter-check-staleness.sh --adapter "<project_dir>/.agent-os"` で `.agent-os/` の staleness を判定（`fresh` / `absent` / `stale`）。`fresh` は素通り。`absent`/`stale` は既定で 1 行通知（`/iterate-adapt` 推奨）+ `adapter_preflight` runlog マーカーのみで書き込みなし。`$ARGUMENTS` に `--adapt` が含まれる場合のみ、`claude/*` ブランチ上で `/iterate-adapt` ステップ 3〜5 相当（`adapter-bootstrap.sh` → `team-profiler` 観測 → `validate-agent-os.sh` → 個別 `git add` + 1 コミット）をインライン実行する（承認ゲートなし、`--adapt` 自体が opt-in）。失敗時は `adapter-recover.sh` で fail-open しエスカレーションせず継続
 
 詳細とエラーメッセージ全文: [`iterate-team-runbook.md#ステップ-0-環境ガードpreflight`](<plugin_root>/operations/iterate-team-runbook.md#ステップ-0-環境ガードpreflight)
 
